@@ -32,6 +32,7 @@ type Options struct {
 	Version    bool   `short:"v" long:"version" description:"Output the current version and exit"`
 	ConfigFile string `long:"config" description:"config file" no-ini:"true"`
 	Debug      bool   `long:"debug" description:"turn on debugging output"`
+	CPUProfile string `long:"cpuprofile" description:"turn on cpu profiling and write output to the provided file"`
 }
 
 // Usage info for --help
@@ -71,7 +72,7 @@ type CLI struct {
 
 // Stream polls the RDS log endpoint forever to effectively tail the logs and
 // spits them out to STDOUT
-func (c *CLI) Stream() error {
+func (c *CLI) Stream(done chan bool) error {
 	// make sure we have a valid log file from which to stream
 	logFiles, err := c.getListRDSLogFiles()
 	if err != nil {
@@ -98,6 +99,11 @@ func (c *CLI) Stream() error {
 		logFile: LogFile{LogFileName: c.Options.LogFile},
 	}
 	for {
+		select {
+		case <-done:
+			return nil
+		default:
+		}
 		// get recent log entries
 		resp, err := c.getRecentEntries(sPos)
 		if err != nil {

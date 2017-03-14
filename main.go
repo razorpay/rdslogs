@@ -5,7 +5,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime/pprof"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -23,6 +25,21 @@ func main() {
 	options, err := parseFlags()
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	done := make(chan bool)
+
+	if options.CPUProfile != "" {
+		f, err := os.Create(options.CPUProfile)
+		if err != nil {
+			log.Fatal("couldn't create profiling output file:" + options.CPUProfile)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+		go func() {
+			time.Sleep(60 * time.Second)
+			done <- true
+		}()
 	}
 
 	c := &cli.CLI{
@@ -62,7 +79,7 @@ func main() {
 		err = c.Download()
 	} else {
 		fmt.Fprintln(os.Stderr, "Running in tail mode - streaming logs from RDS")
-		err = c.Stream()
+		err = c.Stream(done)
 	}
 	if err != nil {
 		log.Fatal(err)
