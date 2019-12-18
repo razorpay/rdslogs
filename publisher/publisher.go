@@ -35,6 +35,7 @@ type HoneycombPublisher struct {
 	SampleRate     int
 	Parser         parsers.Parser
 	AddFields      map[string]string
+	Debug          bool
 	initialized    bool
 	lines          chan string
 	eventsToSend   chan event.Event
@@ -54,6 +55,19 @@ func (h *HoneycombPublisher) Write(chunk string) {
 		})
 		h.lines = make(chan string, lineChanSize)
 		h.eventsToSend = make(chan event.Event)
+		if h.Debug {
+			// log API errors when debug mode is on
+			go func() {
+				for resp := range libhoney.Responses() {
+					if resp.Err != nil {
+						logrus.WithError(resp.Err).WithFields(logrus.Fields{
+							"status_code": resp.StatusCode,
+							"body":        resp.Body,
+						}).Error("error from API")
+					}
+				}
+			}()
+		}
 		go func() {
 			h.Parser.ProcessLines(h.lines, h.eventsToSend, nil)
 			close(h.eventsToSend)

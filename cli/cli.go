@@ -137,6 +137,7 @@ func (c *CLI) Stream() error {
 			SampleRate: c.Options.SampleRate,
 			AddFields:  c.Options.AddFields,
 			Parser:     parser,
+			Debug:      c.Options.Debug,
 		}
 		defer pub.Close()
 		c.output = pub
