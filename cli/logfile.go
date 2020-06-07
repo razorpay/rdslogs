@@ -11,11 +11,11 @@ import (
 // "LogFileName": "slowquery/mysql-slowquery.log.7",
 // "LastWritten": 1474959300000
 type LogFile struct {
-	Size            int64 // in bytes?
-	LogFileName     string
-	LastWritten     int64 // arrives as msec since epoch
-	LastWrittenTime time.Time
-	Path            string
+	Size            int64     `json:"Size"` // in bytes?
+	LogFileName     string    `json:"LogFileName"`
+	LastWritten     int64     `json:"LastWritten"` // arrives as msec since epoch
+	LastWrittenTime time.Time `json:"LastWrittenTime"`
+	Path            string    `json:"Path"`
 }
 
 func (l LogFile) String() string {

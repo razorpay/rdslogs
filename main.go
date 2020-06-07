@@ -19,12 +19,15 @@ import (
 
 	"github.com/honeycombio/rdslogs/cli"
 	"github.com/honeycombio/rdslogs/config"
+	"github.com/honeycombio/rdslogs/tracker"
 )
 
 // BuildID is set by Travis CI
 var BuildID string
 
 func main() {
+	config.LoadConfig()
+
 	options, err := parseFlags()
 	if err != nil {
 		log.Fatal(err)
@@ -52,6 +55,16 @@ func main() {
 			Region: aws.String(options.Region),
 		}),
 		Abort: abort,
+	}
+
+	// Loading config based on tracker
+	if options.Tracker {
+		if options.TrackerType == "redis" {
+			config.InitilizeRedisConfig()
+			c.Tracker = &tracker.RedisTracker{
+				Pool: tracker.NewPool(),
+			}
+		}
 	}
 
 	if options.Debug {

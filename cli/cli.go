@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/honeycombio/rdslogs/config"
 	"github.com/honeycombio/rdslogs/publisher"
+	"github.com/honeycombio/rdslogs/tracker"
 	"github.com/sirupsen/logrus"
 )
 
@@ -46,6 +48,12 @@ type StreamPos struct {
 	marker  string
 }
 
+//PreviousMarker ...
+type PreviousMarker struct {
+	LogFile LogFile
+	Marker  string
+}
+
 // CLI contains handles to the provided Options + aws.RDS struct
 type CLI struct {
 	// Options is for command line options
@@ -60,7 +68,9 @@ type CLI struct {
 	// allow changing the time for tests
 	fakeNower Nower
 
-	PreviousMarker StreamPos
+	PreviousMarker PreviousMarker `json:"PreviousMarker"`
+
+	Tracker tracker.Tracker
 }
 
 // Stream polls the RDS log endpoint forever to effectively tail the logs and
@@ -71,16 +81,20 @@ func (c *CLI) Stream() error {
 
 	// Enabling Tracker
 	if c.Options.Tracker {
-		c.PreviousMarker = StreamPos{
-			logFile: LogFile{
-				Size:        22454,
-				LogFileName: "slowquery/mysql-slowquery.log",
-				LastWritten: 1591459590000,
-			},
-			marker: "17:22454",
+		// c.PreviousMarker = PreviousMarker{
+		// 	LogFile: LogFile{
+		// 		Size:        22454,
+		// 		LogFileName: "slowquery/mysql-slowquery.log",
+		// 		LastWritten: 1591459590000,
+		// 	},
+		// 	Marker: "17:22454",
+		// }
+		// FLAG = true
+		data := c.Tracker.ReadLatestMarker(c.Options.InstanceIdentifier)
+		if data != "" {
+			FLAG = true
+			json.Unmarshal([]byte(data), &c.PreviousMarker)
 		}
-
-		FLAG = true
 	}
 
 	// make sure we have a valid log file from which to stream
@@ -164,8 +178,12 @@ func (c *CLI) Stream() error {
 				if err != nil {
 					return err
 				}
-				c.PreviousMarker = sPos
 				sPos.marker = newMarker
+				c.PreviousMarker = PreviousMarker{
+					LogFile: sPos.logFile,
+					Marker:  sPos.marker,
+				}
+				c.updateTracker()
 				continue
 			}
 			if strings.HasPrefix(err.Error(), "DBLogFileNotFoundFault") {
@@ -238,8 +256,12 @@ func (c *CLI) Stream() error {
 						"currentOffset": offset,
 						"newFileSize":   newestFile.Size,
 					}).Info("last marker offset exceeds newest file size, resetting marker to 0")
-					c.PreviousMarker = sPos
 					sPos.marker = "0"
+					c.PreviousMarker = PreviousMarker{
+						LogFile: sPos.logFile,
+						Marker:  sPos.marker,
+					}
+					c.updateTracker()
 					continue
 				}
 			}
@@ -285,17 +307,16 @@ func (c *CLI) Stream() error {
 
 		// In tracker is enabled, will download the previous file written less than an hour ago
 		if FLAG {
-			splitMarker := strings.Split(c.PreviousMarker.marker, ":")
+			splitMarker := strings.Split(c.PreviousMarker.Marker, ":")
 			splitNewMarker := strings.Split(newMarker, ":")
 			newMarkerInt, _ := strconv.Atoi(splitNewMarker[1])
 			newMarkerInt = newMarkerInt - len(*resp.LogFileData)
-			fmt.Println(len(*resp.LogFileData))
 			c1 := make(chan LogFile)
-			if sPos.logFile.LastWritten-c.PreviousMarker.logFile.LastWritten < 3600000 {
+			if sPos.logFile.LastWritten-c.PreviousMarker.LogFile.LastWritten < 3600000 {
 				if splitMarker[0] == splitNewMarker[0] {
 					suffix := "." + splitNewMarker[0] + "." + splitMarker[1] + "-" + strconv.Itoa(newMarkerInt)
 					sPos.logFile.Path = c.CreateFilePath(sPos.logFile, suffix)
-					go c.downloadFile(sPos.logFile, c1, c.PreviousMarker.marker, splitMarker[1], strconv.Itoa(newMarkerInt))
+					go c.downloadFile(sPos.logFile, c1, c.PreviousMarker.Marker, splitMarker[1], strconv.Itoa(newMarkerInt))
 				}
 			} else {
 				suffix := "." + splitNewMarker[0] + ".0-" + strconv.Itoa(newMarkerInt)
@@ -303,13 +324,15 @@ func (c *CLI) Stream() error {
 				go c.downloadFile(sPos.logFile, c1, "0", "0", strconv.Itoa(newMarkerInt))
 			}
 			FLAG = false
-			x := c1
-			fmt.Println(x)
+			<-c1
 		}
 
-		// Adding previous marker
-		c.PreviousMarker = sPos
 		sPos.marker = newMarker
+		c.PreviousMarker = PreviousMarker{
+			LogFile: sPos.logFile,
+			Marker:  sPos.marker,
+		}
+		c.updateTracker()
 
 		// Writing data to Publisher
 		if resp.LogFileData != nil {
@@ -417,7 +440,7 @@ func (c *CLI) Download() error {
 
 	logFiles, err = c.DownloadLogFiles(logFiles)
 	if err != nil {
-		fmt.Println("Error downloading log files:")
+		logrus.Error("Error downloading log files:", err)
 		return err
 	}
 
@@ -458,13 +481,12 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 	if len(customPathOptional) < 1 {
 		logFile.Path = path.Join(c.Options.DownloadDir, path.Base(logFile.LogFileName))
 	} else {
-		fmt.Println(customPathOptional[0])
 		params.Marker = aws.String(customPathOptional[0])
 		resp.Marker = aws.String(customPathOptional[0])
 	}
 	// open the out file for writing
-	fmt.Printf("Downloading %s to %s ... ", logFile.LogFileName, logFile.Path)
-	defer fmt.Printf("done\n")
+	logrus.Infof("Downloading %s to %s ... ", logFile.LogFileName, logFile.Path)
+	defer logrus.Infof("done\n")
 	if err := os.MkdirAll(path.Dir(logFile.Path), os.ModePerm); err != nil {
 		return logFile, err
 	}
@@ -484,7 +506,6 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 		params.Marker = resp.Marker // support pagination
 		resp, err = c.RDS.DownloadDBLogFilePortion(params)
 		if err != nil {
-			fmt.Println(err)
 			return logFile, err
 		}
 		if len(customPathOptional) > 2 {
@@ -500,13 +521,14 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 			}
 		} else {
 			if _, err := io.WriteString(outfile, aws.StringValue(resp.LogFileData)); err != nil {
-				fmt.Println(err)
+
 				return logFile, err
 			}
 		}
 
 	}
 	ch <- logFile
+	logrus.Infof("file: %s is successfully downloaded", logFile.LogFileName)
 	return logFile, nil
 }
 
@@ -556,7 +578,7 @@ func (c *CLI) GetLatestLogFile() (LogFile, error) {
 	}
 
 	sort.SliceStable(logFiles, func(i, j int) bool { return logFiles[i].LastWritten < logFiles[j].LastWritten })
-	if c.PreviousMarker.logFile.LastWritten > 0 && len(logFiles) > 1 {
+	if c.PreviousMarker.LogFile.LastWritten > 0 && len(logFiles) > 1 {
 		c.DownloadPreviousFiles(logFiles[:len(logFiles)-1])
 	}
 	return logFiles[len(logFiles)-1], nil
@@ -572,8 +594,8 @@ func (c *CLI) getListRDSLogFiles() ([]LogFile, error) {
 			params := &rds.DescribeDBLogFilesInput{
 				DBInstanceIdentifier: &c.Options.InstanceIdentifier,
 			}
-			if c.PreviousMarker.logFile.LastWritten > 0 {
-				params.FileLastWritten = aws.Int64(c.PreviousMarker.logFile.LastWritten)
+			if c.PreviousMarker.LogFile.LastWritten > 0 {
+				params.FileLastWritten = aws.Int64(c.PreviousMarker.LogFile.LastWritten)
 			}
 			output, err = c.RDS.DescribeDBLogFiles(params)
 			logFiles = make([]LogFile, 0, len(output.DescribeDBLogFiles))
@@ -671,13 +693,13 @@ func (c *CLI) DownloadPreviousFiles(logFiles []LogFile) {
 	for _, logFile := range logFiles {
 		c1 := make(chan LogFile)
 		logFile.Path = c.CreateFilePath(logFile)
-		if size, ok := logFile.MatchFileWithMarker(c.PreviousMarker.marker); ok {
+		if size, ok := logFile.MatchFileWithMarker(c.PreviousMarker.Marker); ok {
 			logFile.Path = logFile.Path + "." + size
-			go c.downloadFile(logFile, c1, c.PreviousMarker.marker)
+			go c.downloadFile(logFile, c1, c.PreviousMarker.Marker)
+		} else {
+			go c.downloadFile(logFile, c1, "0")
 		}
-		go c.downloadFile(logFile, c1, "0")
-		x := <-c1
-		fmt.Println(x)
+		<-c1
 	}
 }
 
@@ -696,4 +718,11 @@ func (c *CLI) CreateFilePath(logFiles LogFile, suffix ...string) string {
 		TimeFormat,
 		splitFile[1],
 	}, "/")
+}
+
+func (c *CLI) updateTracker() {
+	if c.Options.Tracker {
+		e, _ := json.Marshal(c.PreviousMarker)
+		c.Tracker.WriteLatestMarker(c.Options.InstanceIdentifier, string(e))
+	}
 }
