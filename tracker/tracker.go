@@ -48,13 +48,17 @@ func NewPool() *redis.Pool {
 
 	return &redis.Pool{
 		// Maximum number of idle connections in the pool.
-		MaxIdle: 80,
+		MaxIdle: dbconfig.MaxIdle,
 		// max number of connections
-		MaxActive: 12000,
+		MaxActive: dbconfig.MaxActive,
 		// Dial is an application supplied function for creating and
 		// configuring a connection.
 		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", dbconfig.Host+":"+dbconfig.Port)
+			c, err := redis.Dial(
+				"tcp",
+				dbconfig.Host+":"+dbconfig.Port,
+				redis.DialPassword(dbconfig.Password),
+				redis.DialDatabase(dbconfig.Database))
 			if err != nil {
 				panic(err.Error())
 			}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
@@ -21,12 +22,16 @@ func LoadConfig() {
 
 //InitilizeRedisConfig ...
 func InitilizeRedisConfig() {
+	database, _ := strconv.Atoi(getenv("TRACKER_DATABASE", "0"))
+	maxIdle, _ := strconv.Atoi(getenv("TRACKER_MAXIDLE", "10"))
+	maxActive, _ := strconv.Atoi(getenv("TRACKER_MAXACTIVE", "100"))
 	RedisDBConfig = RedisConfig{
-		Host:     os.Getenv("TRACKER_HOST"),
-		Database: os.Getenv("TRACKER_DATABASE"),
-		Username: os.Getenv("TRACKER_USERNAME"),
-		Password: os.Getenv("TRACKER_PASSWORD"),
-		Port:     os.Getenv("TRACKER_PORT"),
+		Host:      os.Getenv("TRACKER_HOST"),
+		Database:  database,
+		Password:  os.Getenv("TRACKER_PASSWORD"),
+		Port:      os.Getenv("TRACKER_PORT"),
+		MaxIdle:   maxIdle,
+		MaxActive: maxActive,
 	}
 }
 
@@ -41,4 +46,12 @@ func initilizeLogging() {
 		log.SetLevel(log.WarnLevel)
 	}
 	log.Debug("Logging in debug mode.")
+}
+
+func getenv(key, fallback string) string {
+	value := os.Getenv(key)
+	if len(value) == 0 {
+		return fallback
+	}
+	return value
 }
