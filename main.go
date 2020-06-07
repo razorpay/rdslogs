@@ -17,8 +17,8 @@ import (
 	flag "github.com/jessevdk/go-flags"
 	"github.com/sirupsen/logrus"
 
-	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/rdslogs/cli"
+	"github.com/honeycombio/rdslogs/config"
 )
 
 // BuildID is set by Travis CI
@@ -58,18 +58,10 @@ func main() {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	// if sending output to Honeycomb, make sure we have a write key and dataset
-	if options.Output == "honeycomb" {
-		if options.WriteKey == "" || options.Dataset == "" {
-			log.Fatal("writekey and dataset flags required when output is 'honeycomb'.\nuse --help for usage info.")
-		}
-		if options.SampleRate < 1 {
-			log.Fatal("Sample rate must be a positive integer.\nuse --help for usage info.")
-		}
-		libhoney.UserAgentAddition = fmt.Sprintf("rdslogs/%s", BuildID)
-		fmt.Fprintln(os.Stderr, "Sending output to Honeycomb")
-	} else if options.Output == "stdout" {
+	if options.Output == "stdout" {
 		fmt.Fprintln(os.Stderr, "Sending output to STDOUT")
+	} else if options.Output == "file" {
+		fmt.Fprintln(os.Stderr, "Sending output to FILE")
 	} else {
 		// output flag is neither stdout nor honeycomb.  error and bail
 		log.Fatal("output target not recognized. use --help for usage info")
@@ -106,8 +98,8 @@ func getVersion() string {
 }
 
 // parse all the flags, exit if anything's amiss
-func parseFlags() (*cli.Options, error) {
-	var options cli.Options
+func parseFlags() (*config.Options, error) {
+	var options config.Options
 	flagParser := flag.NewParser(&options, flag.Default)
 	flagParser.Usage = cli.Usage
 

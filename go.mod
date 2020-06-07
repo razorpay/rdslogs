@@ -8,6 +8,7 @@ require (
 	github.com/facebookgo/limitgroup v0.0.0-20150612190941-6abd8d71ec01 // indirect
 	github.com/facebookgo/muster v0.0.0-20150708232844-fd3d7953fd52 // indirect
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
+	github.com/gomodule/redigo v1.8.1 // indirect
 	github.com/honeycombio/honeytail v1.0.1
 	github.com/honeycombio/libhoney-go v1.12.1
 	github.com/honeycombio/mysqltools v0.0.1 // indirect
