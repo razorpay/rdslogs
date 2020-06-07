@@ -17,6 +17,7 @@ import (
 	flag "github.com/jessevdk/go-flags"
 	"github.com/sirupsen/logrus"
 
+	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/rdslogs/cli"
 	"github.com/honeycombio/rdslogs/config"
 	"github.com/honeycombio/rdslogs/tracker"
@@ -71,7 +72,16 @@ func main() {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	if options.Output == "stdout" {
+	if options.Output == "honeycomb" {
+		if options.WriteKey == "" || options.Dataset == "" {
+			log.Fatal("writekey and dataset flags required when output is 'honeycomb'.\nuse --help for usage info.")
+		}
+		if options.SampleRate < 1 {
+			log.Fatal("Sample rate must be a positive integer.\nuse --help for usage info.")
+		}
+		libhoney.UserAgentAddition = fmt.Sprintf("rdslogs/%s", BuildID)
+		fmt.Fprintln(os.Stderr, "Sending output to Honeycomb")
+	} else if options.Output == "stdout" {
 		fmt.Fprintln(os.Stderr, "Sending output to STDOUT")
 	} else if options.Output == "file" {
 		fmt.Fprintln(os.Stderr, "Sending output to FILE")
