@@ -1,11 +1,14 @@
-FROM golang:1.13-alpine
-
-COPY . /go/src/github.com/honeycombio/rdslogs
-WORKDIR /go/src/github.com/honeycombio/rdslogs
+FROM golang:1.14.0-alpine3.11 as rdslogs
 RUN apk update && apk add git
-RUN go get ./...
-RUN go install ./...
+WORKDIR /rdslogs
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN go build -o rdslogs main.go
 
-FROM golang:1.9-alpine
-COPY --from=0 /go/bin/rdslogs /rdslogs
-ENTRYPOINT ["/rdslogs"]
+
+FROM golang:1.14.0-alpine3.11
+WORKDIR /app
+
+COPY --from=rdslogs /rdslogs/rdslogs rdslogs
+ENTRYPOINT ["/app/rdslogs"]

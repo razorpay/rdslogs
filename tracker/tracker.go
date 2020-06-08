@@ -71,6 +71,7 @@ func NewPool() *redis.Pool {
 func (rc RedisConn) set(dbname string, marker string) error {
 	_, err := rc.c.Do("SET", dbname+".marker", marker)
 	if err != nil {
+		log.Error(err)
 		return err
 	}
 	return nil
@@ -81,6 +82,7 @@ func (rc RedisConn) get(dbname string) (string, error) {
 	key := dbname + ".marker"
 	s, err := redis.String(rc.c.Do("GET", key))
 	if err != nil {
+		log.Error(err)
 		return "", err
 	}
 	return s, nil

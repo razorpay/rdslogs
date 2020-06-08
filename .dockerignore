@@ -1,0 +1,7 @@
+.env
+vendor
+kubernetes
+terraform
+.git
+logs
+rdslogs
