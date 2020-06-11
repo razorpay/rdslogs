@@ -8,7 +8,7 @@ RUN apk add --no-cache git && go mod download
 
 COPY . .
 
-RUN go build -o rdslogs main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-w -s" -o rdslogs main.go
 
 
 FROM golang:1.14-alpine3.12
