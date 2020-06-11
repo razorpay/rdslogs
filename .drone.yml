@@ -1,0 +1,7 @@
+build:
+  image: plugins/docker
+  repo: razorpay/armory
+  secrets: [docker_username, docker_password, git_token]
+  build_args_from_env: [git_token]
+  context: rdslogs
+  tags: rdslogs-v${DRONE_BUILD_NUMBER}
