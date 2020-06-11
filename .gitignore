@@ -1,1 +1,4 @@
 rdslogs
+.env
+logs
+vendor

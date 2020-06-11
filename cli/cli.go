@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +18,9 @@ import (
 	"github.com/honeycombio/honeytail/parsers/csv"
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/postgresql"
+	"github.com/honeycombio/rdslogs/config"
 	"github.com/honeycombio/rdslogs/publisher"
+	"github.com/honeycombio/rdslogs/tracker"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,64 +30,34 @@ import (
 // So we can hard-code this prefix format for Postgres log lines.
 const rdsPostgresLinePrefix = "%t:%r:%u@%d:[%p]:"
 
+// DBTypePostgreSQL postgresql db type
 const DBTypePostgreSQL = "postgresql"
+
+// DBTypeMySQL mysql db type
 const DBTypeMySQL = "mysql"
 
+// LogTypeQuery log type query
 const LogTypeQuery = "query"
+
+// LogTypeAudit log type audit
 const LogTypeAudit = "audit"
 
-// Options contains all the CLI flags
-type Options struct {
-	Region             string            `long:"region" description:"AWS region to use" default:"us-east-1"`
-	InstanceIdentifier string            `short:"i" long:"identifier" description:"RDS instance identifier"`
-	DBType             string            `long:"dbtype" description:"RDS database type. Accepted values are mysql and postgresql." default:"mysql"`
-	LogType            string            `long:"log_type" description:"Log file type. Accepted values are query and audit. Audit is currently only supported for mysql." default:"query"`
-	LogFile            string            `short:"f" long:"log_file" description:"RDS log file to retrieve"`
-	Download           bool              `short:"d" long:"download" description:"Download old logs instead of tailing the current log"`
-	DownloadDir        string            `long:"download_dir" description:"directory in to which log files are downloaded" default:"./"`
-	NumLines           int64             `long:"num_lines" description:"number of lines to request at a time from AWS. Larger number will be more efficient, smaller number will allow for longer lines" default:"10000"`
-	BackoffTimer       int64             `long:"backoff_timer" description:"how many seconds to pause when rate limited by AWS." default:"5"`
-	Output             string            `short:"o" long:"output" description:"output for the logs: stdout or honeycomb" default:"stdout"`
-	WriteKey           string            `long:"writekey" description:"Team write key, when output is honeycomb"`
-	Dataset            string            `long:"dataset" description:"Name of the dataset, when output is honeycomb"`
-	APIHost            string            `long:"api_host" description:"Hostname for the Honeycomb API server" default:"https://api.honeycomb.io/"`
-	ScrubQuery         bool              `long:"scrub_query" description:"Replaces the query field with a one-way hash of the contents"`
-	SampleRate         int               `long:"sample_rate" description:"Only send 1 / N log lines" default:"1"`
-	AddFields          map[string]string `short:"a" long:"add_field" description:"Extra fields to send in request, in the style of \"field:value\""`
-	NumParsers         int               `long:"num_parsers" default:"4" description:"Number of parsers to spin up. Currently only supported for the mysql parser."`
-
-	Version            bool   `short:"v" long:"version" description:"Output the current version and exit"`
-	ConfigFile         string `short:"c" long:"config" description:"config file" no-ini:"true"`
-	WriteDefaultConfig bool   `long:"write_default_config" description:"Write a default config file to STDOUT" no-ini:"true"`
-	Debug              bool   `long:"debug" description:"turn on debugging output"`
+// StreamPos represents a log file and marker combination
+type StreamPos struct {
+	logFile LogFile
+	marker  string
 }
 
-// Usage info for --help
-var Usage = `rdslogs --identifier my-rds-instance
-
-rdslogs streams a log file from Amazon RDS and prints it to STDOUT or sends it
-up to Honeycomb.io.
-
-AWS credentials are required and can be provided via IAM roles, AWS shared
-config (~/.aws/config), AWS shared credentials (~/.aws/credentials), or
-the environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
-
-Passing --download triggers Download Mode, in which rdslogs will download the
-specified logs to the directory specified by --download_dir. Logs are specified
-via the --log_file flag, which names an active log file as well as the past 24
-hours of rotated logs. (For example, specifying --log_file=foo.log will download
-foo.log as well as foo.log.0, foo.log.2, ... foo.log.23.)
-
-When --output is set to "honeycomb", the --writekey and --dataset flags are
-required. Instead of being printed to STDOUT, database events from the log will
-be transmitted to Honeycomb. --scrub_query and --sample_rate also only apply to
-honeycomb output.
-`
+//PreviousMarker ...
+type PreviousMarker struct {
+	LogFile LogFile
+	Marker  string
+}
 
 // CLI contains handles to the provided Options + aws.RDS struct
 type CLI struct {
 	// Options is for command line options
-	Options *Options
+	Options *config.Options
 	// RDS is an initialized session connected to RDS
 	RDS *rds.RDS
 	// Abort carries a true message when we catch CTRL-C so we can clean up
@@ -94,19 +67,56 @@ type CLI struct {
 	output publisher.Publisher
 	// allow changing the time for tests
 	fakeNower Nower
+
+	PreviousMarker PreviousMarker `json:"PreviousMarker"`
+
+	Tracker tracker.Tracker
 }
 
 // Stream polls the RDS log endpoint forever to effectively tail the logs and
 // spits them out to either stdout or to Honeycomb.
 func (c *CLI) Stream() error {
+
+	FLAG := false
+
+	// Enabling Tracker
+	if c.Options.Tracker {
+		// c.PreviousMarker = PreviousMarker{
+		// 	LogFile: LogFile{
+		// 		Size:        22454,
+		// 		LogFileName: "slowquery/mysql-slowquery.log",
+		// 		LastWritten: 1591459590000,
+		// 	},
+		// 	Marker: "17:22454",
+		// }
+		// FLAG = true
+		data := c.Tracker.ReadLatestMarker(c.Options.InstanceIdentifier)
+		if data != "" {
+			FLAG = true
+			json.Unmarshal([]byte(data), &c.PreviousMarker)
+		}
+	}
+
 	// make sure we have a valid log file from which to stream
 	latestFile, err := c.GetLatestLogFile()
 	if err != nil {
 		return err
 	}
+
+	// forever, download the most recent entries
+	sPos := StreamPos{
+		logFile: latestFile,
+	}
+
 	// create the chosen output publisher target
 	if c.Options.Output == "stdout" {
 		c.output = &publisher.STDOUTPublisher{}
+	} else if c.Options.Output == "file" {
+		c.output = &publisher.FILEPublisher{
+			FileName: latestFile.LogFileName,
+			Path:     c.CreateFilePath(latestFile),
+			Suffix:   &sPos.marker,
+		}
 	} else {
 		var parser parsers.Parser
 		if c.Options.DBType == DBTypeMySQL && c.Options.LogType == LogTypeQuery {
@@ -141,11 +151,6 @@ func (c *CLI) Stream() error {
 		defer pub.Close()
 		c.output = pub
 	}
-
-	// forever, download the most recent entries
-	sPos := StreamPos{
-		logFile: LogFile{LogFileName: latestFile.LogFileName},
-	}
 	// for mysql audit logs, we always want the first logfile, which may not
 	// show up in GetLatestLogFiles if rdslogs started mid-rotation
 	if c.Options.DBType == DBTypeMySQL && c.Options.LogType == LogTypeAudit {
@@ -158,7 +163,6 @@ func (c *CLI) Stream() error {
 			return fmt.Errorf("signal triggered exit")
 		default:
 		}
-
 		// get recent log entries
 		resp, err := c.getRecentEntries(sPos)
 		if err != nil {
@@ -175,6 +179,11 @@ func (c *CLI) Stream() error {
 					return err
 				}
 				sPos.marker = newMarker
+				c.PreviousMarker = PreviousMarker{
+					LogFile: sPos.logFile,
+					Marker:  sPos.marker,
+				}
+				c.updateTracker()
 				continue
 			}
 			if strings.HasPrefix(err.Error(), "DBLogFileNotFoundFault") {
@@ -185,9 +194,10 @@ func (c *CLI) Stream() error {
 			}
 			return err
 		}
-		if resp.LogFileData != nil {
-			c.output.Write(*resp.LogFileData)
-		}
+
+		// ##################################################### Audit Logs ######################################################
+		// ##################################################### Audit Logs ######################################################
+		// ##################################################### Audit Logs ######################################################
 		if c.Options.DBType == DBTypeMySQL && c.Options.LogType == LogTypeAudit {
 			// The MariaDB audit plugin rotates based on size, not time. If no data
 			// is being returned, it may have been rotated, or maybe the db is just
@@ -247,6 +257,11 @@ func (c *CLI) Stream() error {
 						"newFileSize":   newestFile.Size,
 					}).Info("last marker offset exceeds newest file size, resetting marker to 0")
 					sPos.marker = "0"
+					c.PreviousMarker = PreviousMarker{
+						LogFile: sPos.logFile,
+						Marker:  sPos.marker,
+					}
+					c.updateTracker()
 					continue
 				}
 			}
@@ -269,7 +284,7 @@ func (c *CLI) Stream() error {
 					logrus.WithFields(logrus.Fields{
 						"oldFile": sPos.logFile.LogFileName,
 						"newFile": newestFile.LogFileName}).Info("Found newer file")
-					sPos = StreamPos{logFile: LogFile{LogFileName: newestFile.LogFileName}}
+					sPos.logFile = newestFile
 					continue
 				}
 			}
@@ -281,7 +296,48 @@ func (c *CLI) Stream() error {
 			"prevMarker": sPos.marker,
 			"newMarker":  newMarker,
 			"file":       sPos.logFile.LogFileName}).Info("Got new marker")
+
+		if newMarker == "0" {
+			latestFile, err := c.GetLatestLogFile()
+			if err != nil {
+				return err
+			}
+			sPos.logFile = latestFile
+		}
+
+		// In tracker is enabled, will download the previous file written less than an hour ago
+		if FLAG {
+			splitMarker := strings.Split(c.PreviousMarker.Marker, ":")
+			splitNewMarker := strings.Split(newMarker, ":")
+			newMarkerInt, _ := strconv.Atoi(splitNewMarker[1])
+			newMarkerInt = newMarkerInt - len(*resp.LogFileData)
+			c1 := make(chan LogFile)
+			if sPos.logFile.LastWritten-c.PreviousMarker.LogFile.LastWritten < 3600000 {
+				if splitMarker[0] == splitNewMarker[0] {
+					suffix := "." + splitNewMarker[0] + "." + splitMarker[1] + "-" + strconv.Itoa(newMarkerInt)
+					sPos.logFile.Path = c.CreateFilePath(sPos.logFile, suffix)
+					go c.downloadFile(sPos.logFile, c1, c.PreviousMarker.Marker, splitMarker[1], strconv.Itoa(newMarkerInt))
+				}
+			} else {
+				suffix := "." + splitNewMarker[0] + ".0-" + strconv.Itoa(newMarkerInt)
+				sPos.logFile.Path = c.CreateFilePath(sPos.logFile, suffix)
+				go c.downloadFile(sPos.logFile, c1, "0", "0", strconv.Itoa(newMarkerInt))
+			}
+			FLAG = false
+			<-c1
+		}
+
 		sPos.marker = newMarker
+		c.PreviousMarker = PreviousMarker{
+			LogFile: sPos.logFile,
+			Marker:  sPos.marker,
+		}
+		c.updateTracker()
+
+		// Writing data to Publisher
+		if resp.LogFileData != nil {
+			c.output.Write(*resp.LogFileData)
+		}
 	}
 }
 
@@ -339,12 +395,6 @@ func (c *CLI) getNextMarker(sPos StreamPos, resp *rds.DownloadDBLogFilePortionOu
 	return sPos.marker
 }
 
-// StreamPos represents a log file and marker combination
-type StreamPos struct {
-	logFile LogFile
-	marker  string
-}
-
 // Add returns a new marker string that is the current marker + dataLen offset
 func (s *StreamPos) Add(dataLen int) (string, error) {
 	splitMarker := strings.Split(s.marker, ":")
@@ -390,27 +440,11 @@ func (c *CLI) Download() error {
 
 	logFiles, err = c.DownloadLogFiles(logFiles)
 	if err != nil {
-		fmt.Println("Error downloading log files:")
+		logrus.Error("Error downloading log files:", err)
 		return err
 	}
 
 	return nil
-}
-
-// LogFile wraps the returned structure from AWS
-// "Size": 2196,
-// "LogFileName": "slowquery/mysql-slowquery.log.7",
-// "LastWritten": 1474959300000
-type LogFile struct {
-	Size            int64 // in bytes?
-	LogFileName     string
-	LastWritten     int64 // arrives as msec since epoch
-	LastWrittenTime time.Time
-	Path            string
-}
-
-func (l *LogFile) String() string {
-	return fmt.Sprintf("%-35s (date: %s, size: %d)", l.LogFileName, l.LastWrittenTime, l.Size)
 }
 
 // DownloadLogFiles returns a new copy of the logFile list because it mutates the contents.
@@ -419,11 +453,12 @@ func (c *CLI) DownloadLogFiles(logFiles []LogFile) ([]LogFile, error) {
 	downloadedLogFiles := make([]LogFile, 0, len(logFiles))
 	for i := range logFiles {
 		// returned logFile has a modified Path
-		logFile, err := c.downloadFile(logFiles[i])
-		if err != nil {
-			return nil, err
+		c1 := make(chan LogFile)
+		go c.downloadFile(logFiles[i], c1)
+		select {
+		case logFile := <-c1:
+			downloadedLogFiles = append(downloadedLogFiles, logFile)
 		}
-		downloadedLogFiles = append(downloadedLogFiles, logFile)
 	}
 	return downloadedLogFiles, nil
 }
@@ -431,11 +466,27 @@ func (c *CLI) DownloadLogFiles(logFiles []LogFile) ([]LogFile, error) {
 // downloadFile fetches an individual log file. Note that AWS's RDS
 // DownloadDBLogFilePortion only returns 1MB at a time, and we have to manually
 // paginate it ourselves.
-func (c *CLI) downloadFile(logFile LogFile) (LogFile, error) {
+func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional ...string) (LogFile, error) {
+	logFileData := ""
+	params := &rds.DownloadDBLogFilePortionInput{
+		DBInstanceIdentifier: aws.String(c.Options.InstanceIdentifier),
+		LogFileName:          aws.String(logFile.LogFileName),
+	}
+
+	resp := &rds.DownloadDBLogFilePortionOutput{
+		AdditionalDataPending: aws.Bool(true),
+		Marker:                aws.String("0"),
+	}
+
+	if len(customPathOptional) < 1 {
+		logFile.Path = path.Join(c.Options.DownloadDir, path.Base(logFile.LogFileName))
+	} else {
+		params.Marker = aws.String(customPathOptional[0])
+		resp.Marker = aws.String(customPathOptional[0])
+	}
 	// open the out file for writing
-	logFile.Path = path.Join(c.Options.DownloadDir, path.Base(logFile.LogFileName))
-	fmt.Printf("Downloading %s to %s ... ", logFile.LogFileName, logFile.Path)
-	defer fmt.Printf("done\n")
+	logrus.Infof("Downloading %s to %s ... ", logFile.LogFileName, logFile.Path)
+	defer logrus.Infof("done\n")
 	if err := os.MkdirAll(path.Dir(logFile.Path), os.ModePerm); err != nil {
 		return logFile, err
 	}
@@ -445,14 +496,6 @@ func (c *CLI) downloadFile(logFile LogFile) (LogFile, error) {
 	}
 	defer outfile.Close()
 
-	resp := &rds.DownloadDBLogFilePortionOutput{
-		AdditionalDataPending: aws.Bool(true),
-		Marker:                aws.String("0"),
-	}
-	params := &rds.DownloadDBLogFilePortionInput{
-		DBInstanceIdentifier: aws.String(c.Options.InstanceIdentifier),
-		LogFileName:          aws.String(logFile.LogFileName),
-	}
 	for aws.BoolValue(resp.AdditionalDataPending) {
 		// check for signal triggered exit
 		select {
@@ -465,10 +508,27 @@ func (c *CLI) downloadFile(logFile LogFile) (LogFile, error) {
 		if err != nil {
 			return logFile, err
 		}
-		if _, err := io.WriteString(outfile, aws.StringValue(resp.LogFileData)); err != nil {
-			return logFile, err
+		if len(customPathOptional) > 2 {
+			endMarker, _ := strconv.Atoi(customPathOptional[2])
+			startMarker, _ := strconv.Atoi(customPathOptional[1])
+			logFileData = logFileData + aws.StringValue(resp.LogFileData)
+			end := endMarker - startMarker
+			if len(logFileData) >= end {
+				if _, err := io.WriteString(outfile, logFileData[0:end]); err != nil {
+					return logFile, err
+				}
+				break
+			}
+		} else {
+			if _, err := io.WriteString(outfile, aws.StringValue(resp.LogFileData)); err != nil {
+
+				return logFile, err
+			}
 		}
+
 	}
+	ch <- logFile
+	logrus.Infof("file: %s is successfully downloaded", logFile.LogFileName)
 	return logFile, nil
 }
 
@@ -504,8 +564,11 @@ func (c *CLI) GetLogFiles() ([]LogFile, error) {
 	return matchingLogFiles, nil
 }
 
+// GetLatestLogFile ...
 func (c *CLI) GetLatestLogFile() (LogFile, error) {
+
 	logFiles, err := c.GetLogFiles()
+
 	if err != nil {
 		return LogFile{}, err
 	}
@@ -515,6 +578,9 @@ func (c *CLI) GetLatestLogFile() (LogFile, error) {
 	}
 
 	sort.SliceStable(logFiles, func(i, j int) bool { return logFiles[i].LastWritten < logFiles[j].LastWritten })
+	if c.PreviousMarker.LogFile.LastWritten > 0 && len(logFiles) > 1 {
+		c.DownloadPreviousFiles(logFiles[:len(logFiles)-1])
+	}
 	return logFiles[len(logFiles)-1], nil
 }
 
@@ -523,12 +589,15 @@ func (c *CLI) getListRDSLogFiles() ([]LogFile, error) {
 	var output *rds.DescribeDBLogFilesOutput
 	var err error
 	var logFiles []LogFile
-
 	for {
 		if output == nil {
-			output, err = c.RDS.DescribeDBLogFiles(&rds.DescribeDBLogFilesInput{
+			params := &rds.DescribeDBLogFilesInput{
 				DBInstanceIdentifier: &c.Options.InstanceIdentifier,
-			})
+			}
+			if c.PreviousMarker.LogFile.LastWritten > 0 {
+				params.FileLastWritten = aws.Int64(c.PreviousMarker.LogFile.LastWritten)
+			}
+			output, err = c.RDS.DescribeDBLogFiles(params)
 			logFiles = make([]LogFile, 0, len(output.DescribeDBLogFiles))
 		} else {
 			output, err = c.RDS.DescribeDBLogFiles(&rds.DescribeDBLogFilesInput{
@@ -553,7 +622,6 @@ func (c *CLI) getListRDSLogFiles() ([]LogFile, error) {
 			break
 		}
 	}
-
 	return logFiles, nil
 }
 
@@ -618,4 +686,43 @@ func (c *CLI) waitFor(d time.Duration) {
 // Nower interface abstracts time for testing
 type Nower interface {
 	Now() time.Time
+}
+
+//DownloadPreviousFiles ...
+func (c *CLI) DownloadPreviousFiles(logFiles []LogFile) {
+	for _, logFile := range logFiles {
+		c1 := make(chan LogFile)
+		logFile.Path = c.CreateFilePath(logFile)
+		if size, ok := logFile.MatchFileWithMarker(c.PreviousMarker.Marker); ok {
+			logFile.Path = logFile.Path + "." + size
+			go c.downloadFile(logFile, c1, c.PreviousMarker.Marker)
+		} else {
+			go c.downloadFile(logFile, c1, "0")
+		}
+		<-c1
+	}
+}
+
+//CreateFilePath ....
+func (c *CLI) CreateFilePath(logFiles LogFile, suffix ...string) string {
+	currentTime := time.Now()
+	TimeFormat := currentTime.Format("01-02-2006")
+	splitFile := strings.Split(logFiles.LogFileName, "/")
+	if len(suffix) > 0 {
+		splitFile[1] = splitFile[1] + suffix[0]
+	}
+	return strings.Join([]string{
+		c.Options.DownloadDir,
+		splitFile[0],
+		c.Options.InstanceIdentifier,
+		TimeFormat,
+		splitFile[1],
+	}, "/")
+}
+
+func (c *CLI) updateTracker() {
+	if c.Options.Tracker {
+		e, _ := json.Marshal(c.PreviousMarker)
+		c.Tracker.WriteLatestMarker(c.Options.InstanceIdentifier, string(e))
+	}
 }

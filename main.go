@@ -19,12 +19,16 @@ import (
 
 	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/rdslogs/cli"
+	"github.com/honeycombio/rdslogs/config"
+	"github.com/honeycombio/rdslogs/tracker"
 )
 
 // BuildID is set by Travis CI
 var BuildID string
 
 func main() {
+	config.LoadConfig()
+
 	options, err := parseFlags()
 	if err != nil {
 		log.Fatal(err)
@@ -54,11 +58,20 @@ func main() {
 		Abort: abort,
 	}
 
+	// Loading config based on tracker
+	if options.Tracker {
+		if options.TrackerType == "redis" {
+			config.InitilizeRedisConfig()
+			c.Tracker = &tracker.RedisTracker{
+				Pool: tracker.NewPool(),
+			}
+		}
+	}
+
 	if options.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	// if sending output to Honeycomb, make sure we have a write key and dataset
 	if options.Output == "honeycomb" {
 		if options.WriteKey == "" || options.Dataset == "" {
 			log.Fatal("writekey and dataset flags required when output is 'honeycomb'.\nuse --help for usage info.")
@@ -70,6 +83,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Sending output to Honeycomb")
 	} else if options.Output == "stdout" {
 		fmt.Fprintln(os.Stderr, "Sending output to STDOUT")
+	} else if options.Output == "file" {
+		fmt.Fprintln(os.Stderr, "Sending output to FILE")
 	} else {
 		// output flag is neither stdout nor honeycomb.  error and bail
 		log.Fatal("output target not recognized. use --help for usage info")
@@ -106,8 +121,8 @@ func getVersion() string {
 }
 
 // parse all the flags, exit if anything's amiss
-func parseFlags() (*cli.Options, error) {
-	var options cli.Options
+func parseFlags() (*config.Options, error) {
+	var options config.Options
 	flagParser := flag.NewParser(&options, flag.Default)
 	flagParser.Usage = cli.Usage
 
