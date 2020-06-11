@@ -14,13 +14,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/rds"
-	flag "github.com/jessevdk/go-flags"
-	"github.com/sirupsen/logrus"
-
 	"github.com/honeycombio/libhoney-go"
+	flag "github.com/jessevdk/go-flags"
 	"github.com/razorpay/rdslogs/cli"
 	"github.com/razorpay/rdslogs/config"
 	"github.com/razorpay/rdslogs/tracker"
+	"github.com/sirupsen/logrus"
 )
 
 // BuildID is set by Travis CI

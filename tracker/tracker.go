@@ -3,7 +3,6 @@ package tracker
 import (
 	"github.com/gomodule/redigo/redis"
 	"github.com/razorpay/rdslogs/config"
-
 	log "github.com/sirupsen/logrus"
 )
 

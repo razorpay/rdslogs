@@ -93,7 +93,7 @@ func (c *CLI) Stream() error {
 		data := c.Tracker.ReadLatestMarker(c.Options.InstanceIdentifier)
 		if data != "" {
 			trackerEnabled = true
-			json.Unmarshal([]byte(data), &c.PreviousMarker)
+			_ = json.Unmarshal([]byte(data), &c.PreviousMarker)
 		}
 	}
 
@@ -121,10 +121,10 @@ func (c *CLI) Stream() error {
 		var parser parsers.Parser
 		if c.Options.DBType == DBTypeMySQL && c.Options.LogType == LogTypeQuery {
 			parser = &mysql.Parser{}
-			parser.Init(&mysql.Options{NumParsers: c.Options.NumParsers})
+			_ = parser.Init(&mysql.Options{NumParsers: c.Options.NumParsers})
 		} else if c.Options.DBType == DBTypeMySQL && c.Options.LogType == LogTypeAudit {
 			parser = &csv.Parser{}
-			parser.Init(&csv.Options{
+			_ = parser.Init(&csv.Options{
 				Fields:          "time,hostname,user,source_addr,connection_id,query_id,event_type,database,query,error_code",
 				NumParsers:      c.Options.NumParsers,
 				TimeFieldName:   "time",
@@ -132,7 +132,7 @@ func (c *CLI) Stream() error {
 			})
 		} else if c.Options.DBType == DBTypePostgreSQL {
 			parser = &postgresql.Parser{}
-			parser.Init(&postgresql.Options{LogLinePrefix: rdsPostgresLinePrefix})
+			_ = parser.Init(&postgresql.Options{LogLinePrefix: rdsPostgresLinePrefix})
 		} else {
 			return fmt.Errorf(
 				"Unsupported (dbtype, log_type) pair (`%s`,`%s`)",
