@@ -36,7 +36,6 @@ after_success:
       fi
     fi
 
-
 addons:
     artifacts:
         debug: true

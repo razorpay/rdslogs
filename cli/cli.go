@@ -18,9 +18,9 @@ import (
 	"github.com/honeycombio/honeytail/parsers/csv"
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/postgresql"
-	"github.com/honeycombio/rdslogs/config"
-	"github.com/honeycombio/rdslogs/publisher"
-	"github.com/honeycombio/rdslogs/tracker"
+	"github.com/razorpay/rdslogs/config"
+	"github.com/razorpay/rdslogs/publisher"
+	"github.com/razorpay/rdslogs/tracker"
 	"github.com/sirupsen/logrus"
 )
 
@@ -77,7 +77,7 @@ type CLI struct {
 // spits them out to either stdout or to Honeycomb.
 func (c *CLI) Stream() error {
 
-	FLAG := false
+	trackerEnabled := false
 
 	// Enabling Tracker
 	if c.Options.Tracker {
@@ -89,10 +89,10 @@ func (c *CLI) Stream() error {
 		// 	},
 		// 	Marker: "17:22454",
 		// }
-		// FLAG = true
+		// trackerEnabled = true
 		data := c.Tracker.ReadLatestMarker(c.Options.InstanceIdentifier)
 		if data != "" {
-			FLAG = true
+			trackerEnabled = true
 			json.Unmarshal([]byte(data), &c.PreviousMarker)
 		}
 	}
@@ -306,7 +306,7 @@ func (c *CLI) Stream() error {
 		}
 
 		// In tracker is enabled, will download the previous file written less than an hour ago
-		if FLAG {
+		if trackerEnabled {
 			splitMarker := strings.Split(c.PreviousMarker.Marker, ":")
 			splitNewMarker := strings.Split(newMarker, ":")
 			newMarkerInt, _ := strconv.Atoi(splitNewMarker[1])
@@ -323,7 +323,7 @@ func (c *CLI) Stream() error {
 				sPos.logFile.Path = c.CreateFilePath(sPos.logFile, suffix)
 				go c.downloadFile(sPos.logFile, c1, "0", "0", strconv.Itoa(newMarkerInt))
 			}
-			FLAG = false
+			trackerEnabled = false
 			<-c1
 		}
 

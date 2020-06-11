@@ -1,5 +1,6 @@
 .env
 vendor
+.idea
 kubernetes
 terraform
 .git
