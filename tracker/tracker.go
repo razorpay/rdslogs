@@ -2,7 +2,7 @@ package tracker
 
 import (
 	"github.com/gomodule/redigo/redis"
-	"github.com/honeycombio/rdslogs/config"
+	"github.com/razorpay/rdslogs/config"
 
 	log "github.com/sirupsen/logrus"
 )

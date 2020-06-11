@@ -18,9 +18,9 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/honeycombio/libhoney-go"
-	"github.com/honeycombio/rdslogs/cli"
-	"github.com/honeycombio/rdslogs/config"
-	"github.com/honeycombio/rdslogs/tracker"
+	"github.com/razorpay/rdslogs/cli"
+	"github.com/razorpay/rdslogs/config"
+	"github.com/razorpay/rdslogs/tracker"
 )
 
 // BuildID is set by Travis CI
