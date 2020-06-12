@@ -140,7 +140,7 @@ func (s *STDOUTPublisher) Write(line string) {
 // FILEPublisher implements Publisher and save to file
 type FILEPublisher struct {
 	FileName string
-	Path     string
+	Path     *string
 	Suffix   *string
 }
 
@@ -151,7 +151,7 @@ func (s *FILEPublisher) Write(line string) {
 		suffix = "." + splitMarker[0]
 	}
 
-	filename := s.Path + suffix
+	filename := *s.Path + suffix
 	if err := os.MkdirAll(path.Dir(filename), os.ModePerm); err != nil {
 		log.Fatal(err)
 	}
