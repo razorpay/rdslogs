@@ -38,6 +38,7 @@ func InitilizeRedisConfig() {
 func initilizeLogging() {
 	log.SetFormatter(&log.JSONFormatter{})
 	loglevel := os.Getenv("LOG_LEVEL")
+
 	if loglevel == "debug" {
 		log.SetLevel(log.DebugLevel)
 	} else if loglevel == "info" {
@@ -45,6 +46,7 @@ func initilizeLogging() {
 	} else {
 		log.SetLevel(log.WarnLevel)
 	}
+
 	log.Debug("Logging in debug mode.")
 }
 

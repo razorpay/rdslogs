@@ -15,32 +15,14 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/honeycombio/honeytail/parsers"
-	"github.com/honeycombio/honeytail/parsers/csv"
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/razorpay/rdslogs/config"
+	"github.com/razorpay/rdslogs/constants"
 	"github.com/razorpay/rdslogs/publisher"
 	"github.com/razorpay/rdslogs/tracker"
 	"github.com/sirupsen/logrus"
 )
-
-// Fortunately for us, the RDS team has diligently ignored requests to make
-// RDS Postgres's `log_line_prefix` customizable for years
-// (https://forums.aws.amazon.com/thread.jspa?threadID=143460).
-// So we can hard-code this prefix format for Postgres log lines.
-const rdsPostgresLinePrefix = "%t:%r:%u@%d:[%p]:"
-
-// DBTypePostgreSQL postgresql db type
-const DBTypePostgreSQL = "postgresql"
-
-// DBTypeMySQL mysql db type
-const DBTypeMySQL = "mysql"
-
-// LogTypeQuery log type query
-const LogTypeQuery = "query"
-
-// LogTypeAudit log type audit
-const LogTypeAudit = "audit"
 
 // StreamPos represents a log file and marker combination
 type StreamPos struct {
@@ -74,23 +56,14 @@ type CLI struct {
 }
 
 // Stream polls the RDS log endpoint forever to effectively tail the logs and
-// spits them out to either stdout or to Honeycomb.
+// spits them out to either stdout or to file.
 func (c *CLI) Stream() error {
-
 	trackerEnabled := false
 
 	// Enabling Tracker
 	if c.Options.Tracker {
-		// c.PreviousMarker = PreviousMarker{
-		// 	LogFile: LogFile{
-		// 		Size:        22454,
-		// 		LogFileName: "slowquery/mysql-slowquery.log",
-		// 		LastWritten: 1591459590000,
-		// 	},
-		// 	Marker: "17:22454",
-		// }
-		// trackerEnabled = true
 		data := c.Tracker.ReadLatestMarker(c.Options.InstanceIdentifier)
+
 		if data != "" {
 			trackerEnabled = true
 			_ = json.Unmarshal([]byte(data), &c.PreviousMarker)
@@ -109,9 +82,9 @@ func (c *CLI) Stream() error {
 	}
 
 	// create the chosen output publisher target
-	if c.Options.Output == "stdout" {
+	if c.Options.Output == constants.OutputStdOut {
 		c.output = &publisher.STDOUTPublisher{}
-	} else if c.Options.Output == "file" {
+	} else if c.Options.Output == constants.OutputFile {
 		c.output = &publisher.FILEPublisher{
 			FileName: latestFile.LogFileName,
 			Path:     c.CreateFilePath(latestFile),
@@ -119,24 +92,17 @@ func (c *CLI) Stream() error {
 		}
 	} else {
 		var parser parsers.Parser
-		if c.Options.DBType == DBTypeMySQL && c.Options.LogType == LogTypeQuery {
+
+		if c.Options.DBType == constants.DBTypeMySQL {
 			parser = &mysql.Parser{}
-			_ = parser.Init(&mysql.Options{NumParsers: c.Options.NumParsers})
-		} else if c.Options.DBType == DBTypeMySQL && c.Options.LogType == LogTypeAudit {
-			parser = &csv.Parser{}
-			_ = parser.Init(&csv.Options{
-				Fields:          "time,hostname,user,source_addr,connection_id,query_id,event_type,database,query,error_code",
-				NumParsers:      c.Options.NumParsers,
-				TimeFieldName:   "time",
-				TimeFieldFormat: "20060102 15:04:05",
-			})
-		} else if c.Options.DBType == DBTypePostgreSQL {
+			err = parser.Init(&mysql.Options{NumParsers: c.Options.NumParsers})
+		} else if c.Options.DBType == constants.DBTypePostgreSQL {
 			parser = &postgresql.Parser{}
-			_ = parser.Init(&postgresql.Options{LogLinePrefix: rdsPostgresLinePrefix})
-		} else {
-			return fmt.Errorf(
-				"Unsupported (dbtype, log_type) pair (`%s`,`%s`)",
-				c.Options.DBType, c.Options.LogType)
+			err = parser.Init(&postgresql.Options{LogLinePrefix: constants.RdsPostgresLinePrefix})
+		}
+
+		if err != nil {
+			return err
 		}
 
 		pub := &publisher.HoneycombPublisher{
@@ -148,14 +114,17 @@ func (c *CLI) Stream() error {
 			AddFields:  c.Options.AddFields,
 			Parser:     parser,
 		}
+
 		defer pub.Close()
 		c.output = pub
 	}
+
 	// for mysql audit logs, we always want the first logfile, which may not
 	// show up in GetLatestLogFiles if rdslogs started mid-rotation
-	if c.Options.DBType == DBTypeMySQL && c.Options.LogType == LogTypeAudit {
+	if c.Options.DBType == constants.DBTypeMySQL {
 		sPos.logFile.LogFileName = c.Options.LogFile
 	}
+
 	for {
 		// check for signal triggered exit
 		select {
@@ -163,6 +132,7 @@ func (c *CLI) Stream() error {
 			return fmt.Errorf("signal triggered exit")
 		default:
 		}
+
 		// get recent log entries
 		resp, err := c.getRecentEntries(sPos)
 		if err != nil {
@@ -171,6 +141,7 @@ func (c *CLI) Stream() error {
 				c.waitFor(time.Duration(c.Options.BackoffTimer) * time.Second)
 				continue
 			}
+
 			if strings.HasPrefix(err.Error(), "InvalidParameterValue: This file contains binary data") {
 				logrus.Infof("binary data at marker %s, skipping 1000 in marker position\n", sPos.marker)
 				// skip over inaccessible data
@@ -186,89 +157,19 @@ func (c *CLI) Stream() error {
 				c.updateTracker()
 				continue
 			}
+
 			if strings.HasPrefix(err.Error(), "DBLogFileNotFoundFault") {
 				logrus.WithError(err).
 					Warn("log does not appear to exist (rotation ongoing?) - waiting and retrying")
 				c.waitFor(time.Second * 5)
 				continue
 			}
+
 			return err
 		}
 
-		// ##################################################### Audit Logs ######################################################
-		// ##################################################### Audit Logs ######################################################
-		// ##################################################### Audit Logs ######################################################
-		if c.Options.DBType == DBTypeMySQL && c.Options.LogType == LogTypeAudit {
-			// The MariaDB audit plugin rotates based on size, not time. If no data
-			// is being returned, it may have been rotated, or maybe the db is just
-			// very quiet and nothing is being logged. We'll have to inspect
-			// the log sizes to be sure
-
-			// If we reset our marker, asked for logs, and got an empty marker back,
-			// we don't have anything to do but wait
-			if sPos.marker == "0" && (resp.Marker != nil && *resp.Marker == "") {
-				c.waitFor(time.Second * 5)
-				continue
-			}
-
-			// Two scenarios can occur during log rotation, depending on timing
-			// - the file doesn't exist because rotation is ongoing, in which case
-			// AdditionalDataPending will be false, marker will be "", and LogFileData will be nil
-			// - the file exists but it's been rotated, meaning our marker is wrong and doesn't point
-			// at a valid position - in this case, RDS will return the marker back to us with ""
-			// for logfile data
-			// In either scenario, we need to check for a new file. When we're sure there's a new file,
-			// reset the marker
-			if (resp.Marker != nil && resp.LogFileData != nil && sPos.marker == *resp.Marker) ||
-				!*resp.AdditionalDataPending && resp.LogFileData == nil {
-				newestFile, err := c.GetLatestLogFile()
-				if err != nil {
-					return err
-				}
-
-				// If the latest log file doesn't match the first log file (i.e
-				// server_audit.log.1 exists but not server_audit.log) we're in the
-				// middle of a rotation, so let's wait
-				if newestFile.LogFileName != sPos.logFile.LogFileName {
-					logrus.WithFields(logrus.Fields{
-						"expectedFile": sPos.logFile.LogFileName,
-						"newestFile":   newestFile.LogFileName,
-					}).Info("newest file is a rotated file, we appear to be mid-rotation")
-					c.waitFor(time.Second * 5)
-					continue
-				}
-
-				// ok there's a server_audit.log file out there
-				// check the current position of the last read (this appears to be in bytes)
-				splitMarker := strings.Split(sPos.marker, ":")
-				if len(splitMarker) != 2 {
-					// something's wrong. marker should have been #:#
-					logrus.WithField("marker", sPos.marker).
-						Warn("marker didn't split into two pieces across a colon")
-					continue
-				}
-				offset, _ := strconv.Atoi(splitMarker[1])
-
-				// if our last position is greater in size than the current file
-				// a rotation has probably occurred and we can reset the marker
-				if int64(offset) > newestFile.Size {
-					logrus.WithFields(logrus.Fields{
-						"currentOffset": offset,
-						"newFileSize":   newestFile.Size,
-					}).Info("last marker offset exceeds newest file size, resetting marker to 0")
-					sPos.marker = "0"
-					c.PreviousMarker = PreviousMarker{
-						LogFile: sPos.logFile,
-						Marker:  sPos.marker,
-					}
-					c.updateTracker()
-					continue
-				}
-			}
-		}
-
 		if !*resp.AdditionalDataPending || (resp.Marker != nil && *resp.Marker == "0") {
-			if c.Options.DBType == DBTypePostgreSQL {
+			if c.Options.DBType == constants.DBTypePostgreSQL {
 				// If that's all we've got for now, see if there's a newer file to
 				// start tailing. This logic is only relevant for postgres: the
 				// newest postgres log file will be named
@@ -288,14 +189,20 @@ func (c *CLI) Stream() error {
 					continue
 				}
 			}
+
 			// Wait for a few seconds and try again.
 			c.waitFor(5 * time.Second)
 		}
+
 		newMarker := c.getNextMarker(sPos, resp)
-		logrus.WithFields(logrus.Fields{
-			"prevMarker": sPos.marker,
-			"newMarker":  newMarker,
-			"file":       sPos.logFile.LogFileName}).Info("Got new marker")
+
+		if newMarker != sPos.marker {
+			logrus.WithFields(logrus.Fields{
+				"prevMarker": sPos.marker,
+				"newMarker":  newMarker,
+				"file":       sPos.logFile.LogFileName}).
+				Debug("Got new marker")
+		}
 
 		if newMarker == "0" {
 			latestFile, err := c.GetLatestLogFile()
@@ -311,6 +218,7 @@ func (c *CLI) Stream() error {
 			splitNewMarker := strings.Split(newMarker, ":")
 			newMarkerInt, _ := strconv.Atoi(splitNewMarker[1])
 			newMarkerInt = newMarkerInt - len(*resp.LogFileData)
+
 			c1 := make(chan LogFile)
 			if sPos.logFile.LastWritten-c.PreviousMarker.LogFile.LastWritten < 3600000 {
 				if splitMarker[0] == splitNewMarker[0] {
@@ -323,6 +231,7 @@ func (c *CLI) Stream() error {
 				sPos.logFile.Path = c.CreateFilePath(sPos.logFile, suffix)
 				go c.downloadFile(sPos.logFile, c1, "0", "0", strconv.Itoa(newMarkerInt))
 			}
+
 			trackerEnabled = false
 			<-c1
 		}
@@ -350,6 +259,7 @@ func (c *CLI) getNextMarker(sPos StreamPos, resp *rds.DownloadDBLogFilePortionOu
 		logrus.Warn("resp was nil, returning previous marker")
 		return sPos.marker
 	}
+
 	if resp.Marker == nil {
 		logrus.Warn("resp marker is nil, returning previous marker")
 		return sPos.marker
@@ -360,6 +270,7 @@ func (c *CLI) getNextMarker(sPos StreamPos, resp *rds.DownloadDBLogFilePortionOu
 	if *resp.Marker != "0" {
 		return *resp.Marker
 	}
+
 	// ok, we've hit the end of a segment, but did we get any data? If we got
 	// data, then it's not really the end of the segment and we should calculate a
 	// new marker and use that.

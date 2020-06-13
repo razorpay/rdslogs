@@ -5,7 +5,6 @@ type Options struct {
 	Region             string            `long:"region" description:"AWS region to use" default:"us-east-1"`
 	InstanceIdentifier string            `short:"i" long:"identifier" description:"RDS instance identifier"`
 	DBType             string            `long:"dbtype" description:"RDS database type. Accepted values are mysql and postgresql." default:"mysql"`
-	LogType            string            `long:"log_type" description:"Log file type. Accepted values are query and audit. Audit is currently only supported for mysql." default:"query"`
 	LogFile            string            `short:"f" long:"log_file" description:"RDS log file to retrieve"`
 	Download           bool              `short:"d" long:"download" description:"Download old logs instead of tailing the current log"`
 	DownloadDir        string            `long:"download_dir" description:"directory in to which log files are downloaded" default:"./"`
