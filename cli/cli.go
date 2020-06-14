@@ -14,9 +14,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/rds"
-	//"github.com/honeycombio/honeytail/parsers"
-	//"github.com/honeycombio/honeytail/parsers/mysql"
-	//"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/razorpay/rdslogs/config"
 	"github.com/razorpay/rdslogs/constants"
 	"github.com/razorpay/rdslogs/formatter"
@@ -82,23 +79,6 @@ func (c *CLI) Stream() error {
 		logFile: latestFile,
 	}
 
-	/*
-	// get parsers
-	var parser parsers.Parser
-
-	if c.Options.DBType == constants.DBTypeMySQL {
-		parser = &mysql.Parser{}
-		err = parser.Init(&mysql.Options{NumParsers: c.Options.NumParsers})
-	} else if c.Options.DBType == constants.DBTypePostgreSQL {
-		parser = &postgresql.Parser{}
-		err = parser.Init(&postgresql.Options{LogLinePrefix: constants.RdsPostgresLinePrefix})
-	}
-
-	if err != nil {
-		return err
-	}
-	*/
-
 	fmt.Println("got the parser")
 
 	// create the chosen output publisher target
@@ -106,9 +86,9 @@ func (c *CLI) Stream() error {
 		c.output = &publisher.STDOUTPublisher{}
 	} else if c.Options.Output == constants.OutputFile {
 		c.output = &publisher.FILEPublisher{
-			FileName:   latestFile.LogFileName,
-			Path:       c.CreateFilePath(latestFile),
-			Suffix:     &sPos.marker,
+			FileName: latestFile.LogFileName,
+			Path:     c.CreateFilePath(latestFile),
+			Suffix:   &sPos.marker,
 		}
 	}
 
