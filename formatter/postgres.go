@@ -7,5 +7,8 @@ import (
 type PostgresFormatter struct {}
 
 func (f *PostgresFormatter) Format(log string) []string {
-	return fmt.Sprintf("DATA: %s", log)
+	var str []string
+	str = append(str, fmt.Sprintf("DATA: %s", log))
+
+	return str
 }

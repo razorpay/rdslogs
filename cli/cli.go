@@ -14,9 +14,9 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/honeycombio/honeytail/parsers"
-	"github.com/honeycombio/honeytail/parsers/mysql"
-	"github.com/honeycombio/honeytail/parsers/postgresql"
+	//"github.com/honeycombio/honeytail/parsers"
+	//"github.com/honeycombio/honeytail/parsers/mysql"
+	//"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/razorpay/rdslogs/config"
 	"github.com/razorpay/rdslogs/constants"
 	"github.com/razorpay/rdslogs/formatter"
