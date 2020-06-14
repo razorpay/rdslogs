@@ -57,6 +57,7 @@ type CLI struct {
 // spits them out to either stdout or to file.
 func (c *CLI) Stream() error {
 	trackerEnabled := false
+	var logFilePath string
 
 	// Enabling Tracker
 	if c.Options.Tracker {
@@ -70,6 +71,7 @@ func (c *CLI) Stream() error {
 
 	// make sure we have a valid log file from which to stream
 	latestFile, err := c.GetLatestLogFile()
+	logFilePath = c.CreateFilePath(latestFile)
 	if err != nil {
 		return err
 	}
@@ -87,7 +89,7 @@ func (c *CLI) Stream() error {
 	} else if c.Options.Output == constants.OutputFile {
 		c.output = &publisher.FILEPublisher{
 			FileName: latestFile.LogFileName,
-			Path:     c.CreateFilePath(latestFile),
+			Path:     &logFilePath,
 			Suffix:   &sPos.marker,
 		}
 	}
@@ -150,6 +152,7 @@ func (c *CLI) Stream() error {
 				// will always be named
 				// slowquery/mysql-slowquery.log.
 				newestFile, err := c.GetLatestLogFile()
+				logFilePath = c.CreateFilePath(newestFile)
 				if err != nil {
 					return err
 				}
@@ -179,6 +182,7 @@ func (c *CLI) Stream() error {
 
 		if newMarker == "0" {
 			latestFile, err := c.GetLatestLogFile()
+			logFilePath = c.CreateFilePath(latestFile)
 			if err != nil {
 				return err
 			}
