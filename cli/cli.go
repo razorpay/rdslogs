@@ -235,15 +235,12 @@ func (c *CLI) Stream() error {
 
 		fmt.Println("after tracker")
 
-		if sPos.marker != newMarker {
-			sPos.marker = newMarker
-
-			c.PreviousMarker = PreviousMarker{
-				LogFile: sPos.logFile,
-				Marker:  sPos.marker,
-			}
-			c.updateTracker()
+		sPos.marker = newMarker
+		c.PreviousMarker = PreviousMarker{
+			LogFile: sPos.logFile,
+			Marker:  sPos.marker,
 		}
+		c.updateTracker()
 
 		fmt.Println("before write")
 
