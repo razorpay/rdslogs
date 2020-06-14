@@ -9,4 +9,6 @@ const lineChanSize = 100000
 type Publisher interface {
 	// Write accepts a long blob of text and writes it to the target
 	Write(blob string)
+
+	Close()
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/razorpay/rdslogs/config"
 	"github.com/razorpay/rdslogs/constants"
+	"github.com/razorpay/rdslogs/formatter"
 	"github.com/razorpay/rdslogs/publisher"
 	"github.com/razorpay/rdslogs/tracker"
 	"github.com/sirupsen/logrus"
@@ -81,42 +82,32 @@ func (c *CLI) Stream() error {
 		logFile: latestFile,
 	}
 
+	// get parsers
+	var parser parsers.Parser
+
+	if c.Options.DBType == constants.DBTypeMySQL {
+		parser = &mysql.Parser{}
+		err = parser.Init(&mysql.Options{NumParsers: c.Options.NumParsers})
+	} else if c.Options.DBType == constants.DBTypePostgreSQL {
+		parser = &postgresql.Parser{}
+		err = parser.Init(&postgresql.Options{LogLinePrefix: constants.RdsPostgresLinePrefix})
+	}
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("got the parser")
+
 	// create the chosen output publisher target
 	if c.Options.Output == constants.OutputStdOut {
 		c.output = &publisher.STDOUTPublisher{}
 	} else if c.Options.Output == constants.OutputFile {
 		c.output = &publisher.FILEPublisher{
-			FileName: latestFile.LogFileName,
-			Path:     c.CreateFilePath(latestFile),
-			Suffix:   &sPos.marker,
+			FileName:   latestFile.LogFileName,
+			Path:       c.CreateFilePath(latestFile),
+			Suffix:     &sPos.marker,
 		}
-	} else {
-		var parser parsers.Parser
-
-		if c.Options.DBType == constants.DBTypeMySQL {
-			parser = &mysql.Parser{}
-			err = parser.Init(&mysql.Options{NumParsers: c.Options.NumParsers})
-		} else if c.Options.DBType == constants.DBTypePostgreSQL {
-			parser = &postgresql.Parser{}
-			err = parser.Init(&postgresql.Options{LogLinePrefix: constants.RdsPostgresLinePrefix})
-		}
-
-		if err != nil {
-			return err
-		}
-
-		pub := &publisher.HoneycombPublisher{
-			Writekey:   c.Options.WriteKey,
-			Dataset:    c.Options.Dataset,
-			APIHost:    c.Options.APIHost,
-			ScrubQuery: c.Options.ScrubQuery,
-			SampleRate: c.Options.SampleRate,
-			AddFields:  c.Options.AddFields,
-			Parser:     parser,
-		}
-
-		defer pub.Close()
-		c.output = pub
 	}
 
 	// for mysql audit logs, we always want the first logfile, which may not
@@ -126,6 +117,7 @@ func (c *CLI) Stream() error {
 	}
 
 	for {
+		fmt.Println("inside for loop")
 		// check for signal triggered exit
 		select {
 		case <-c.Abort:
@@ -133,6 +125,7 @@ func (c *CLI) Stream() error {
 		default:
 		}
 
+		fmt.Println("after signals")
 		// get recent log entries
 		resp, err := c.getRecentEntries(sPos)
 		if err != nil {
@@ -161,12 +154,15 @@ func (c *CLI) Stream() error {
 			if strings.HasPrefix(err.Error(), "DBLogFileNotFoundFault") {
 				logrus.WithError(err).
 					Warn("log does not appear to exist (rotation ongoing?) - waiting and retrying")
-				c.waitFor(time.Second * 5)
+				c.waitFor(time.Second * 1)
 				continue
 			}
 
 			return err
 		}
+
+		fmt.Println("recent entries")
+		fmt.Println(resp)
 
 		if !*resp.AdditionalDataPending || (resp.Marker != nil && *resp.Marker == "0") {
 			if c.Options.DBType == constants.DBTypePostgreSQL {
@@ -194,6 +190,7 @@ func (c *CLI) Stream() error {
 			c.waitFor(5 * time.Second)
 		}
 
+		fmt.Println("before marker")
 		newMarker := c.getNextMarker(sPos, resp)
 
 		if newMarker != sPos.marker {
@@ -204,6 +201,8 @@ func (c *CLI) Stream() error {
 				Debug("Got new marker")
 		}
 
+		fmt.Println("after marker")
+
 		if newMarker == "0" {
 			latestFile, err := c.GetLatestLogFile()
 			if err != nil {
@@ -211,6 +210,8 @@ func (c *CLI) Stream() error {
 			}
 			sPos.logFile = latestFile
 		}
+
+		fmt.Println("before tracker")
 
 		// In tracker is enabled, will download the previous file written less than an hour ago
 		if trackerEnabled {
@@ -236,16 +237,35 @@ func (c *CLI) Stream() error {
 			<-c1
 		}
 
-		sPos.marker = newMarker
-		c.PreviousMarker = PreviousMarker{
-			LogFile: sPos.logFile,
-			Marker:  sPos.marker,
+		fmt.Println("after tracker")
+
+		if sPos.marker != newMarker {
+			sPos.marker = newMarker
+
+			c.PreviousMarker = PreviousMarker{
+				LogFile: sPos.logFile,
+				Marker:  sPos.marker,
+			}
+			c.updateTracker()
 		}
-		c.updateTracker()
+
+		fmt.Println("before write")
 
 		// Writing data to Publisher
-		if resp.LogFileData != nil {
-			c.output.Write(*resp.LogFileData)
+		if resp.LogFileData != nil && *resp.LogFileData != "" {
+			var formattedData string
+
+			if c.Options.DBType == constants.DBTypeMySQL {
+				formatter := &formatter.MySQLFormatter{}
+
+				formattedData = formatter.Format(*resp.LogFileData)
+			} else if c.Options.DBType == constants.DBTypePostgreSQL {
+				formatter := &formatter.PostgresFormatter{}
+
+				formattedData = formatter.Format(*resp.LogFileData)
+			}
+
+			c.output.Write(formattedData)
 		}
 	}
 }

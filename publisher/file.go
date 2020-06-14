@@ -5,6 +5,10 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
+
+	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/parsers"
 )
 
 // FILEPublisher implements Publisher and saves data to file
@@ -12,6 +16,18 @@ type FILEPublisher struct {
 	FileName string
 	Path     string
 	Suffix   *string
+	Writekey       string
+	Dataset        string
+	APIHost        string
+	ScrubQuery     bool
+	SampleRate     int
+	Parser         parsers.Parser
+	AddFields      map[string]string
+	initialized    bool
+	lines          chan string
+	eventsToSend   chan event.Event
+	eventsSent     uint
+	lastUpdateTime time.Time
 }
 
 func (s *FILEPublisher) Write(line string) {
@@ -36,3 +52,5 @@ func (s *FILEPublisher) Write(line string) {
 		log.Fatal(err)
 	}
 }
+
+func (s *FILEPublisher) Close() {}

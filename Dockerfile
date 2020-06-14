@@ -1,13 +1,15 @@
 FROM golang:1.14-alpine3.12 as rdslogs
 
-WORKDIR /rdslogs
+ENV GOPATH=/go
 
-COPY go.mod go.sum ./
+RUN mkdir -p /go/src/github.com/razorpay/rdslogs && apk add --no-cache bash git mariadb-client
 
-RUN apk add --no-cache bash git && go mod download
+WORKDIR /go/src/github.com/razorpay/rdslogs/
 
-COPY . .
+COPY . /go/src/github.com/razorpay/rdslogs/
+
+RUN rm -f go.mod go.sum && go mod init && go mod download
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-w -s" -o rdslogs main.go
 
-ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT ["sleep", "864000"]

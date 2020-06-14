@@ -42,7 +42,7 @@ func (r *RedisTracker) WriteLatestMarker(dbname string, marker string) {
 
 // NewPool ....
 func NewPool() *redis.Pool {
-	log.Info("Creating Connection")
+	log.Debug("Creating Connection")
 	dbconfig := config.RedisDBConfig
 
 	return &redis.Pool{

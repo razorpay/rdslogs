@@ -26,7 +26,7 @@ import (
 var BuildID string
 
 func main() {
-	config.LoadConfig()
+	config.InitilizeLogging()
 
 	options, err := parseFlags()
 	if err != nil {
@@ -36,6 +36,7 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	abort := make(chan bool, 0)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
 	go func() {
 		sig := <-sigs
 		fmt.Fprintf(os.Stderr, "Aborting! Caught Signal \"%s\"\n", sig)

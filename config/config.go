@@ -4,21 +4,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 )
 
 //RedisDBConfig ...
 var RedisDBConfig RedisConfig
-
-//LoadConfig ...
-func LoadConfig() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Error("Error loading .env file")
-	}
-	initilizeLogging()
-}
 
 //InitilizeRedisConfig ...
 func InitilizeRedisConfig() {
@@ -35,7 +25,7 @@ func InitilizeRedisConfig() {
 	}
 }
 
-func initilizeLogging() {
+func InitilizeLogging() {
 	log.SetFormatter(&log.JSONFormatter{})
 	loglevel := os.Getenv("LOG_LEVEL")
 
@@ -55,5 +45,6 @@ func getenv(key, fallback string) string {
 	if len(value) == 0 {
 		return fallback
 	}
+
 	return value
 }
