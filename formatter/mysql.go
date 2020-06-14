@@ -10,11 +10,19 @@ import (
 
 type MySQLFormatter struct {}
 
-func (f *MySQLFormatter) Format(log string) string {
+func (f *MySQLFormatter) Format(log string) []string {
 	data := JsonData{}
+	var QueryStrings []string
 	logSlice := strings.Split(log, "\n")
 
+	counter := 0
 	for _, line := range logSlice {
+		if counter == 0 {
+			data = JsonData{}
+		}
+
+		counter++
+
 		line = strings.Trim(line, " ")
 
 		if line == "" {
@@ -43,16 +51,24 @@ func (f *MySQLFormatter) Format(log string) string {
 			data.Timestamp = getTimestamp(line)
 		} else {
 			data.Query = line
+
+			if data.Time == "" {
+				continue
+			}
+
+			jsonData, err := json.Marshal(data)
+
+			if err != nil {
+				continue
+			}
+
+			QueryStrings = append(QueryStrings, string(jsonData))
+
+			counter = 0
 		}
 	}
 
-	jsonData, err := json.Marshal(data)
-
-	if err != nil {
-		return ""
-	}
-
-	return string(jsonData)
+	return QueryStrings
 }
 
 func getQueryTime(str string) string {

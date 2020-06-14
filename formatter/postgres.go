@@ -6,6 +6,6 @@ import (
 
 type PostgresFormatter struct {}
 
-func (f *PostgresFormatter) Format(log string) string {
+func (f *PostgresFormatter) Format(log string) []string {
 	return fmt.Sprintf("DATA: %s", log)
 }

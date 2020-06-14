@@ -82,6 +82,7 @@ func (c *CLI) Stream() error {
 		logFile: latestFile,
 	}
 
+	/*
 	// get parsers
 	var parser parsers.Parser
 
@@ -96,6 +97,7 @@ func (c *CLI) Stream() error {
 	if err != nil {
 		return err
 	}
+	*/
 
 	fmt.Println("got the parser")
 
@@ -247,7 +249,7 @@ func (c *CLI) Stream() error {
 
 		// Writing data to Publisher
 		if resp.LogFileData != nil && *resp.LogFileData != "" {
-			var formattedData string
+			var formattedData []string
 
 			if c.Options.DBType == constants.DBTypeMySQL {
 				formatter := &formatter.MySQLFormatter{}
@@ -259,9 +261,11 @@ func (c *CLI) Stream() error {
 				formattedData = formatter.Format(*resp.LogFileData)
 			}
 
-			if formattedData != "" {
-				fmt.Println("lets write")
-				c.output.Write(formattedData)
+			for _, jsonData := range formattedData {
+				if jsonData != "" {
+					fmt.Println("lets write")
+					c.output.Write(jsonData)
+				}
 			}
 		}
 	}

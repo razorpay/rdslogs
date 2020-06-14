@@ -1,7 +1,7 @@
 package formatter
 
 type Formatter interface {
-	Format(string) string
+	Format(string) []string
 }
 
 type JsonData struct {
