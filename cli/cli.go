@@ -189,13 +189,11 @@ func (c *CLI) Stream() error {
 		fmt.Println("before marker")
 		newMarker := c.getNextMarker(sPos, resp)
 
-		if newMarker != sPos.marker {
-			logrus.WithFields(logrus.Fields{
-				"prevMarker": sPos.marker,
-				"newMarker":  newMarker,
-				"file":       sPos.logFile.LogFileName}).
-				Debug("Got new marker")
-		}
+		logrus.WithFields(logrus.Fields{
+			"prevMarker": sPos.marker,
+			"newMarker":  newMarker,
+			"file":       sPos.logFile.LogFileName}).
+			Debug("Got new marker")
 
 		fmt.Println("after marker")
 
@@ -256,6 +254,10 @@ func (c *CLI) Stream() error {
 				formatter := &formatter.PostgresFormatter{}
 
 				formattedData = formatter.Format(*resp.LogFileData)
+			}
+
+			if len(formattedData) == 0 {
+				fmt.Println("no formattedData")
 			}
 
 			for _, jsonData := range formattedData {

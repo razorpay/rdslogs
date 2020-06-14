@@ -5,10 +5,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"time"
-
-	"github.com/honeycombio/honeytail/event"
-	"github.com/honeycombio/honeytail/parsers"
 )
 
 // FILEPublisher implements Publisher and saves data to file
