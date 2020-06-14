@@ -81,7 +81,7 @@ func (c *CLI) Stream() error {
 		logFile: latestFile,
 	}
 
-	fmt.Println("got the parser")
+	//fmt.Println("got the parser")
 
 	// create the chosen output publisher target
 	if c.Options.Output == constants.OutputStdOut {
@@ -95,7 +95,7 @@ func (c *CLI) Stream() error {
 	}
 
 	for {
-		fmt.Println("inside for loop")
+		//fmt.Println("inside for loop")
 		// check for signal triggered exit
 		select {
 		case <-c.Abort:
@@ -103,7 +103,7 @@ func (c *CLI) Stream() error {
 		default:
 		}
 
-		fmt.Println("after signals")
+		//fmt.Println("after signals")
 		// get recent log entries
 		resp, err := c.getRecentEntries(sPos)
 		if err != nil {
@@ -139,8 +139,8 @@ func (c *CLI) Stream() error {
 			return err
 		}
 
-		fmt.Println("recent entries")
-		fmt.Println(resp)
+		//fmt.Println("recent entries")
+		//fmt.Println(resp)
 
 		if !*resp.AdditionalDataPending || (resp.Marker != nil && *resp.Marker == "0") {
 			if c.Options.DBType == constants.DBTypePostgreSQL {
@@ -169,16 +169,16 @@ func (c *CLI) Stream() error {
 			c.waitFor(5 * time.Second)
 		}
 
-		fmt.Println("before marker")
+		//fmt.Println("before marker")
 		newMarker := c.getNextMarker(sPos, resp)
 
 		logrus.WithFields(logrus.Fields{
 			"prevMarker": sPos.marker,
 			"newMarker":  newMarker,
 			"file":       sPos.logFile.LogFileName}).
-			Debug("Got new marker")
+			Info("Got new marker")
 
-		fmt.Println("after marker")
+		//fmt.Println("after marker")
 
 		if newMarker == "0" {
 			latestFile, err := c.GetLatestLogFile()
@@ -189,7 +189,7 @@ func (c *CLI) Stream() error {
 			sPos.logFile = latestFile
 		}
 
-		fmt.Println("before tracker")
+		//fmt.Println("before tracker")
 
 		// In tracker is enabled, will download the previous file written less than an hour ago
 		if trackerEnabled {
@@ -220,7 +220,7 @@ func (c *CLI) Stream() error {
 
 		}
 
-		fmt.Println("after tracker")
+		//fmt.Println("after tracker")
 
 		sPos.marker = newMarker
 		c.PreviousMarker = PreviousMarker{
@@ -229,7 +229,7 @@ func (c *CLI) Stream() error {
 		}
 		c.updateTracker()
 
-		fmt.Println("before write")
+		//fmt.Println("before write")
 
 		// Writing data to Publisher
 		if resp.LogFileData != nil && *resp.LogFileData != "" {
@@ -246,19 +246,19 @@ func (c *CLI) Stream() error {
 			}
 
 			if len(formattedData) == 0 {
-				fmt.Println("no formattedData")
+				//fmt.Println("no formattedData")
 			}
 
 			for _, jsonData := range formattedData {
 				if jsonData != "" {
-					fmt.Println("lets write")
+					//fmt.Println("lets write")
 					c.output.Write(jsonData)
 				} else {
-					fmt.Println("blank jsonData")
+					//fmt.Println("blank jsonData")
 				}
 			}
 		} else {
-			fmt.Println("blank resp.LogFileData")
+			//fmt.Println("blank resp.LogFileData")
 		}
 	}
 }

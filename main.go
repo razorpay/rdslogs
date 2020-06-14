@@ -68,13 +68,9 @@ func main() {
 		}
 	}
 
-	/*
 	if options.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
-	*/
-
-	logrus.SetLevel(logrus.DebugLevel)
 
 	if options.Output == constants.OutputStdOut {
 		fmt.Fprintln(os.Stderr, "Sending output to STDOUT")
