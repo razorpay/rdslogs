@@ -110,12 +110,6 @@ func (c *CLI) Stream() error {
 		}
 	}
 
-	// for mysql audit logs, we always want the first logfile, which may not
-	// show up in GetLatestLogFiles if rdslogs started mid-rotation
-	if c.Options.DBType == constants.DBTypeMySQL {
-		sPos.logFile.LogFileName = c.Options.LogFile
-	}
-
 	for {
 		fmt.Println("inside for loop")
 		// check for signal triggered exit
@@ -265,7 +259,10 @@ func (c *CLI) Stream() error {
 				formattedData = formatter.Format(*resp.LogFileData)
 			}
 
-			c.output.Write(formattedData)
+			if formattedData != "" {
+				fmt.Println("lets write")
+				c.output.Write(formattedData)
+			}
 		}
 	}
 }
