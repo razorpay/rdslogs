@@ -195,20 +195,25 @@ func (c *CLI) Stream() error {
 			newMarkerInt = newMarkerInt - len(*resp.LogFileData)
 
 			c1 := make(chan LogFile)
+			flag := false
 			if sPos.logFile.LastWritten-c.PreviousMarker.LogFile.LastWritten < 3600000 {
 				if splitMarker[0] == splitNewMarker[0] {
+					flag = true
 					suffix := "." + splitNewMarker[0] + "." + splitMarker[1] + "-" + strconv.Itoa(newMarkerInt)
 					sPos.logFile.Path = c.CreateFilePath(sPos.logFile, suffix)
 					go c.downloadFile(sPos.logFile, c1, c.PreviousMarker.Marker, splitMarker[1], strconv.Itoa(newMarkerInt))
 				}
+			}
+			trackerEnabled = false
+			if flag {
+				<-c1
 			} else {
 				suffix := "." + splitNewMarker[0] + ".0-" + strconv.Itoa(newMarkerInt)
 				sPos.logFile.Path = c.CreateFilePath(sPos.logFile, suffix)
 				go c.downloadFile(sPos.logFile, c1, "0", "0", strconv.Itoa(newMarkerInt))
+				<-c1
 			}
 
-			trackerEnabled = false
-			<-c1
 		}
 
 		fmt.Println("after tracker")
