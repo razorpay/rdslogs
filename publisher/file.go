@@ -16,18 +16,6 @@ type FILEPublisher struct {
 	FileName string
 	Path     string
 	Suffix   *string
-	Writekey       string
-	Dataset        string
-	APIHost        string
-	ScrubQuery     bool
-	SampleRate     int
-	Parser         parsers.Parser
-	AddFields      map[string]string
-	initialized    bool
-	lines          chan string
-	eventsToSend   chan event.Event
-	eventsSent     uint
-	lastUpdateTime time.Time
 }
 
 func (s *FILEPublisher) Write(line string) {

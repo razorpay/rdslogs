@@ -150,7 +150,7 @@ func (c *CLI) Stream() error {
 			if strings.HasPrefix(err.Error(), "DBLogFileNotFoundFault") {
 				logrus.WithError(err).
 					Warn("log does not appear to exist (rotation ongoing?) - waiting and retrying")
-				c.waitFor(time.Second * 1)
+				c.waitFor(time.Second * 5)
 				continue
 			}
 
@@ -262,8 +262,12 @@ func (c *CLI) Stream() error {
 				if jsonData != "" {
 					fmt.Println("lets write")
 					c.output.Write(jsonData)
+				} else {
+					fmt.Println("blank jsonData")
 				}
 			}
+		} else {
+			fmt.Println("blank resp.LogFileData")
 		}
 	}
 }
