@@ -36,5 +36,3 @@ func (s *FILEPublisher) Write(line string) {
 		log.Fatal(err)
 	}
 }
-
-func (s *FILEPublisher) Close() {}

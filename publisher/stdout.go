@@ -12,5 +12,3 @@ type STDOUTPublisher struct {
 func (s *STDOUTPublisher) Write(line string) {
 	_, _ = io.WriteString(os.Stdout, line)
 }
-
-func (s *STDOUTPublisher) Close() {}

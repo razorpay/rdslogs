@@ -409,11 +409,13 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 			return logFile, fmt.Errorf("signal triggered exit")
 		default:
 		}
+
 		params.Marker = resp.Marker // support pagination
 		resp, err = c.RDS.DownloadDBLogFilePortion(params)
 		if err != nil {
 			return logFile, err
 		}
+
 		if len(customPathOptional) > 2 {
 			endMarker, _ := strconv.Atoi(customPathOptional[2])
 			startMarker, _ := strconv.Atoi(customPathOptional[1])
@@ -438,9 +440,8 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 				}
 			}
 		}
-
-		defer output.Close()
 	}
+
 	ch <- logFile
 	logrus.Infof("file: %s is successfully downloaded", logFile.LogFileName)
 	return logFile, nil
