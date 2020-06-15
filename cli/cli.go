@@ -222,7 +222,7 @@ func (c *CLI) Stream() error {
 
 		// Writing data to Publisher
 		if resp.LogFileData != nil && *resp.LogFileData != "" {
-			formattedData := c.formatLogFileDate(*resp.LogFileData)
+			formattedData := c.formatLogFileData(*resp.LogFileData)
 
 			for _, jsonData := range formattedData {
 				if jsonData != "" {
@@ -420,7 +420,7 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 			logFileData = logFileData + aws.StringValue(resp.LogFileData)
 			end := endMarker - startMarker
 			if len(logFileData) >= end {
-				formattedData := c.formatLogFileDate(logFileData[0:end])
+				formattedData := c.formatLogFileData(logFileData[0:end])
 
 				for _, jsonData := range formattedData {
 					if jsonData != "" {
@@ -430,7 +430,7 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 				break
 			}
 		} else {
-			formattedData := c.formatLogFileDate(aws.StringValue(resp.LogFileData))
+			formattedData := c.formatLogFileData(aws.StringValue(resp.LogFileData))
 
 			for _, jsonData := range formattedData {
 				if jsonData != "" {
@@ -641,7 +641,7 @@ func (c *CLI) updateTracker() {
 	}
 }
 
-func (c *CLI) formatLogFileDate(logFileData string) []string {
+func (c *CLI) formatLogFileData(logFileData string) []string {
 	var formattedData []string
 
 	if c.Options.Formatter {
