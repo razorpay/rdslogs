@@ -154,7 +154,7 @@ func (c *CLI) Stream() error {
 				if newestFile.LogFileName != sPos.logFile.LogFileName {
 					logrus.WithFields(logrus.Fields{
 						"oldFile": sPos.logFile.LogFileName,
-						"newFile": newestFile.LogFileName}).Debug("Found newer file")
+						"newFile": newestFile.LogFileName}).Info("Found newer file")
 					sPos.logFile = newestFile
 					continue
 				}
@@ -171,7 +171,7 @@ func (c *CLI) Stream() error {
 			"prevMarker": sPos.marker,
 			"newMarker":  newMarker,
 			"file":       sPos.logFile.LogFileName}).
-			Debug("Got new marker")
+			Info("Got new marker")
 
 		if newMarker == "0" {
 			latestFile, err := c.GetLatestLogFile()
@@ -278,12 +278,12 @@ func (c *CLI) getNextMarker(sPos StreamPos, resp *rds.DownloadDBLogFilePortionOu
 	curMin, _ := strconv.Atoi(now.Format("04"))
 	if curMin > 5 {
 		logrus.WithField("newMarker", *resp.Marker).
-			Debug("no log data received but it's %d minutes (> 5) past "+
+			Infof("no log data received but it's %d minutes (> 5) past "+
 				"the hour, returning resp marker", curMin)
 		return *resp.Marker
 	}
 	logrus.WithField("prevMarker", sPos.marker).
-		Debug("no log data received but it's %d minutes (< 5) past "+
+		Infof("no log data received but it's %d minutes (< 5) past "+
 			"the hour, returning previous marker", curMin)
 	// let's try again from where we did the last time.
 	return sPos.marker
@@ -343,7 +343,7 @@ func (c *CLI) Download() error {
 
 // DownloadLogFiles returns a new copy of the logFile list because it mutates the contents.
 func (c *CLI) DownloadLogFiles(logFiles []LogFile) ([]LogFile, error) {
-	logrus.Debug("Downloading log files to %s\n", c.Options.DownloadDir)
+	logrus.Infof("Downloading log files to %s\n", c.Options.DownloadDir)
 	downloadedLogFiles := make([]LogFile, 0, len(logFiles))
 	for i := range logFiles {
 		// returned logFile has a modified Path
@@ -398,9 +398,9 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 			Path:     &logFile.Path,
 		}
 	} else {
-		logrus.Debugf("Downloading previous file %s in %s mode", logFile.LogFileName, c.Options.Output)
+		logrus.Infof("Downloading previous file %s in %s mode", logFile.LogFileName, c.Options.Output)
 	}
-	defer logrus.Debugf("done\n")
+	defer logrus.Infof("done\n")
 
 	for aws.BoolValue(resp.AdditionalDataPending) {
 		// check for signal triggered exit
@@ -442,7 +442,7 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 		defer output.Close()
 	}
 	ch <- logFile
-	logrus.Debugf("file: %s is successfully downloaded", logFile.LogFileName)
+	logrus.Infof("file: %s is successfully downloaded", logFile.LogFileName)
 	return logFile, nil
 }
 

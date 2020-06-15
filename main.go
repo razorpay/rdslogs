@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -19,7 +18,7 @@ import (
 	"github.com/razorpay/rdslogs/config"
 	"github.com/razorpay/rdslogs/constants"
 	"github.com/razorpay/rdslogs/tracker"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // BuildID is set by Travis CI
@@ -28,6 +27,7 @@ var BuildID string
 func main() {
 	appEnv := os.Getenv("APP_ENV")
 	if len(appEnv) > 0 && (appEnv == "dev" || appEnv != "development") {
+		log.Infof("Running application in development mode...")
 		config.LoadConfigFromFile()
 	}
 	config.InitilizeLogging()
@@ -73,7 +73,7 @@ func main() {
 	}
 
 	if options.Debug {
-		logrus.SetLevel(logrus.DebugLevel)
+		log.SetLevel(log.DebugLevel)
 	}
 
 	if options.Output == constants.OutputStdOut {
