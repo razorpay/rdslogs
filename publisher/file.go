@@ -16,7 +16,7 @@ type FILEPublisher struct {
 
 func (s *FILEPublisher) Write(line string) {
 	suffix := ""
-	if *s.Suffix != "" {
+	if s.Suffix != nil && *s.Suffix != "" {
 		splitMarker := strings.Split(*s.Suffix, ":")
 		suffix = "." + splitMarker[0]
 	}

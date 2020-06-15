@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -108,13 +106,13 @@ func (c *CLI) Stream() error {
 		resp, err := c.getRecentEntries(sPos)
 		if err != nil {
 			if strings.HasPrefix(err.Error(), "Throttling: Rate exceeded") {
-				logrus.Infof("AWS Rate limit hit; sleeping for %d seconds.\n", c.Options.BackoffTimer)
+				logrus.Warnf("AWS Rate limit hit; sleeping for %d seconds.\n", c.Options.BackoffTimer)
 				c.waitFor(time.Duration(c.Options.BackoffTimer) * time.Second)
 				continue
 			}
 
 			if strings.HasPrefix(err.Error(), "InvalidParameterValue: This file contains binary data") {
-				logrus.Infof("binary data at marker %s, skipping 1000 in marker position\n", sPos.marker)
+				logrus.Warnf("binary data at marker %s, skipping 1000 in marker position\n", sPos.marker)
 				// skip over inaccessible data
 				newMarker, err := sPos.Add(1000)
 				if err != nil {
@@ -138,9 +136,6 @@ func (c *CLI) Stream() error {
 
 			return err
 		}
-
-		//fmt.Println("recent entries")
-		//fmt.Println(resp)
 
 		if !*resp.AdditionalDataPending || (resp.Marker != nil && *resp.Marker == "0") {
 			if c.Options.DBType == constants.DBTypePostgreSQL {
@@ -177,8 +172,6 @@ func (c *CLI) Stream() error {
 			"newMarker":  newMarker,
 			"file":       sPos.logFile.LogFileName}).
 			Info("Got new marker")
-
-		//fmt.Println("after marker")
 
 		if newMarker == "0" {
 			latestFile, err := c.GetLatestLogFile()
@@ -220,8 +213,6 @@ func (c *CLI) Stream() error {
 
 		}
 
-		//fmt.Println("after tracker")
-
 		sPos.marker = newMarker
 		c.PreviousMarker = PreviousMarker{
 			LogFile: sPos.logFile,
@@ -229,36 +220,15 @@ func (c *CLI) Stream() error {
 		}
 		c.updateTracker()
 
-		//fmt.Println("before write")
-
 		// Writing data to Publisher
 		if resp.LogFileData != nil && *resp.LogFileData != "" {
-			var formattedData []string
-
-			if c.Options.DBType == constants.DBTypeMySQL {
-				formatter := &formatter.MySQLFormatter{}
-
-				formattedData = formatter.Format(*resp.LogFileData)
-			} else if c.Options.DBType == constants.DBTypePostgreSQL {
-				formatter := &formatter.PostgresFormatter{}
-
-				formattedData = formatter.Format(*resp.LogFileData)
-			}
-
-			if len(formattedData) == 0 {
-				//fmt.Println("no formattedData")
-			}
+			formattedData := c.formatLogFileData(*resp.LogFileData)
 
 			for _, jsonData := range formattedData {
 				if jsonData != "" {
-					//fmt.Println("lets write")
 					c.output.Write(jsonData)
-				} else {
-					//fmt.Println("blank jsonData")
 				}
 			}
-		} else {
-			//fmt.Println("blank resp.LogFileData")
 		}
 	}
 }
@@ -392,6 +362,8 @@ func (c *CLI) DownloadLogFiles(logFiles []LogFile) ([]LogFile, error) {
 // paginate it ourselves.
 func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional ...string) (LogFile, error) {
 	logFileData := ""
+	var err error
+	var output publisher.Publisher
 	params := &rds.DownloadDBLogFilePortionInput{
 		DBInstanceIdentifier: aws.String(c.Options.InstanceIdentifier),
 		LogFileName:          aws.String(logFile.LogFileName),
@@ -408,17 +380,27 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 		params.Marker = aws.String(customPathOptional[0])
 		resp.Marker = aws.String(customPathOptional[0])
 	}
-	// open the out file for writing
-	logrus.Infof("Downloading %s to %s ... ", logFile.LogFileName, logFile.Path)
+
+	if c.Options.Output == constants.OutputStdOut {
+		output = &publisher.STDOUTPublisher{}
+	} else if c.Options.Output == constants.OutputFile {
+		output = &publisher.FILEPublisher{
+			FileName: logFile.LogFileName,
+			Path:     &logFile.Path,
+		}
+	}
+
+	if c.Options.Download {
+		// open the out file for writing
+		logrus.Infof("Downloading %s to %s ... ", logFile.LogFileName, logFile.Path)
+		output = &publisher.FILEPublisher{
+			FileName: logFile.LogFileName,
+			Path:     &logFile.Path,
+		}
+	} else {
+		logrus.Infof("Downloading previous file %s in %s mode", logFile.LogFileName, c.Options.Output)
+	}
 	defer logrus.Infof("done\n")
-	if err := os.MkdirAll(path.Dir(logFile.Path), os.ModePerm); err != nil {
-		return logFile, err
-	}
-	outfile, err := os.Create(logFile.Path)
-	if err != nil {
-		return logFile, err
-	}
-	defer outfile.Close()
 
 	for aws.BoolValue(resp.AdditionalDataPending) {
 		// check for signal triggered exit
@@ -438,18 +420,26 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 			logFileData = logFileData + aws.StringValue(resp.LogFileData)
 			end := endMarker - startMarker
 			if len(logFileData) >= end {
-				if _, err := io.WriteString(outfile, logFileData[0:end]); err != nil {
-					return logFile, err
+				formattedData := c.formatLogFileData(logFileData[0:end])
+
+				for _, jsonData := range formattedData {
+					if jsonData != "" {
+						output.Write(jsonData)
+					}
 				}
 				break
 			}
 		} else {
-			if _, err := io.WriteString(outfile, aws.StringValue(resp.LogFileData)); err != nil {
+			formattedData := c.formatLogFileData(aws.StringValue(resp.LogFileData))
 
-				return logFile, err
+			for _, jsonData := range formattedData {
+				if jsonData != "" {
+					output.Write(jsonData)
+				}
 			}
 		}
 
+		defer output.Close()
 	}
 	ch <- logFile
 	logrus.Infof("file: %s is successfully downloaded", logFile.LogFileName)
@@ -649,4 +639,24 @@ func (c *CLI) updateTracker() {
 		e, _ := json.Marshal(c.PreviousMarker)
 		c.Tracker.WriteLatestMarker(c.Options.InstanceIdentifier, string(e))
 	}
+}
+
+func (c *CLI) formatLogFileData(logFileData string) []string {
+	var formattedData []string
+
+	if c.Options.Formatter {
+		if c.Options.DBType == constants.DBTypeMySQL {
+			formatter := &formatter.MySQLFormatter{}
+
+			formattedData = formatter.Format(logFileData)
+		} else if c.Options.DBType == constants.DBTypePostgreSQL {
+			formatter := &formatter.PostgresFormatter{}
+
+			formattedData = formatter.Format(logFileData)
+		}
+	} else {
+		formattedData = []string{logFileData}
+	}
+
+	return formattedData
 }

@@ -3,8 +3,7 @@ package cli
 // Usage info for --help
 var Usage = `rdslogs --identifier my-rds-instance
 
-rdslogs streams a log file from Amazon RDS and prints it to STDOUT or sends it
-up to Honeycomb.io.
+rdslogs streams a log file from Amazon RDS and prints it to STDOUT or File
 
 AWS credentials are required and can be provided via IAM roles, AWS shared
 config (~/.aws/config), AWS shared credentials (~/.aws/credentials), or
@@ -16,8 +15,10 @@ via the --log_file flag, which names an active log file as well as the past 24
 hours of rotated logs. (For example, specifying --log_file=foo.log will download
 foo.log as well as foo.log.0, foo.log.2, ... foo.log.23.)
 
-When --output is set to "honeycomb", the --writekey and --dataset flags are
-required. Instead of being printed to STDOUT, database events from the log will
-be transmitted to Honeycomb. --scrub_query and --sample_rate also only apply to
-honeycomb output.
+When --output is set to "file", will download the specified logs to the directory
+specified by --download_dir instead of being printed to STDOUT.
+
+When --tracker is enabled, it will store the marker by default to redis or we can
+set the tracker type by passing value to --tracker_type. Tracker backfills the data
+in stream mode only according to marker stored in tracker.
 `
