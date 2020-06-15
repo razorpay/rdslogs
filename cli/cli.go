@@ -381,9 +381,9 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 		resp.Marker = aws.String(customPathOptional[0])
 	}
 
-	if c.Options.Output == "stdout" {
+	if c.Options.Output == constants.OutputStdOut {
 		output = &publisher.STDOUTPublisher{}
-	} else if c.Options.Output == "file" {
+	} else if c.Options.Output == constants.OutputFile {
 		output = &publisher.FILEPublisher{
 			FileName: logFile.LogFileName,
 			Path:     &logFile.Path,

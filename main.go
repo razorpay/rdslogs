@@ -26,7 +26,7 @@ var BuildID string
 
 func main() {
 	appEnv := os.Getenv("APP_ENV")
-	if len(appEnv) > 0 && (appEnv == "dev" || appEnv != "development") {
+	if len(appEnv) > 0 && (appEnv == "dev" || appEnv == "development") {
 		log.Infof("Running application in development mode...")
 		config.LoadConfigFromFile()
 	}
