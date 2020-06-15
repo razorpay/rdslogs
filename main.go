@@ -26,6 +26,10 @@ import (
 var BuildID string
 
 func main() {
+	appEnv := os.Getenv("APP_ENV")
+	if len(appEnv) > 0 && (appEnv == "dev" || appEnv != "development") {
+		config.LoadConfigFromFile()
+	}
 	config.InitilizeLogging()
 
 	options, err := parseFlags()
