@@ -16,4 +16,4 @@ RUN go mod download
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-w -s" -o rdslogs main.go
 
-ENTRYPOINT ["sleep", "864000"]
+ENTRYPOINT ["/go/src/github.com/razorpay/rdslogs/rdslogs"]
