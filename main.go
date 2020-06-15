@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -14,19 +13,24 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/honeycombio/libhoney-go"
 	flag "github.com/jessevdk/go-flags"
 	"github.com/razorpay/rdslogs/cli"
 	"github.com/razorpay/rdslogs/config"
+	"github.com/razorpay/rdslogs/constants"
 	"github.com/razorpay/rdslogs/tracker"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // BuildID is set by Travis CI
 var BuildID string
 
 func main() {
-	config.LoadConfig()
+	appEnv := os.Getenv("APP_ENV")
+	if len(appEnv) > 0 && (appEnv == "dev" || appEnv == "development") {
+		log.Infof("Running application in development mode...")
+		config.LoadConfigFromFile()
+	}
+	config.InitilizeLogging()
 
 	options, err := parseFlags()
 	if err != nil {
@@ -36,6 +40,7 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	abort := make(chan bool, 0)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
 	go func() {
 		sig := <-sigs
 		fmt.Fprintf(os.Stderr, "Aborting! Caught Signal \"%s\"\n", sig)
@@ -59,7 +64,7 @@ func main() {
 
 	// Loading config based on tracker
 	if options.Tracker {
-		if options.TrackerType == "redis" {
+		if options.TrackerType == constants.TrackerRedis {
 			config.InitilizeRedisConfig()
 			c.Tracker = &tracker.RedisTracker{
 				Pool: tracker.NewPool(),
@@ -68,24 +73,14 @@ func main() {
 	}
 
 	if options.Debug {
-		logrus.SetLevel(logrus.DebugLevel)
+		log.SetLevel(log.DebugLevel)
 	}
 
-	if options.Output == "honeycomb" {
-		if options.WriteKey == "" || options.Dataset == "" {
-			log.Fatal("writekey and dataset flags required when output is 'honeycomb'.\nuse --help for usage info.")
-		}
-		if options.SampleRate < 1 {
-			log.Fatal("Sample rate must be a positive integer.\nuse --help for usage info.")
-		}
-		libhoney.UserAgentAddition = fmt.Sprintf("rdslogs/%s", BuildID)
-		fmt.Fprintln(os.Stderr, "Sending output to Honeycomb")
-	} else if options.Output == "stdout" {
+	if options.Output == constants.OutputStdOut {
 		fmt.Fprintln(os.Stderr, "Sending output to STDOUT")
-	} else if options.Output == "file" {
+	} else if options.Output == constants.OutputFile {
 		fmt.Fprintln(os.Stderr, "Sending output to FILE")
 	} else {
-		// output flag is neither stdout nor honeycomb.  error and bail
 		log.Fatal("output target not recognized. use --help for usage info")
 	}
 
@@ -105,9 +100,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Running in tail mode - streaming logs from RDS")
 		err = c.Stream()
 	}
+
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	fmt.Fprintln(os.Stderr, "OK")
 }
 
@@ -162,23 +159,16 @@ func parseFlags() (*config.Options, error) {
 		}
 	}
 
-	if options.DBType == cli.DBTypeMySQL && options.LogType == cli.LogTypeQuery {
-		if options.LogFile == "" {
+	if options.LogFile == "" {
+		if options.DBType == constants.DBTypeMySQL {
 			options.LogFile = "slowquery/mysql-slowquery.log"
-		}
-	} else if options.DBType == cli.DBTypeMySQL && options.LogType == cli.LogTypeAudit {
-		if options.LogFile == "" {
-			options.LogFile = "audit/server_audit.log"
-		}
-	} else if options.DBType == cli.DBTypePostgreSQL && options.LogType == cli.LogTypeQuery {
-		if options.LogFile == "" {
+		} else if options.DBType == constants.DBTypePostgreSQL {
 			options.LogFile = "error/postgresql.log"
+		} else {
+			log.Fatal(fmt.Sprintf("unsupported dbtype: `%s`", options.DBType))
 		}
-	} else {
-		return nil, fmt.Errorf(
-			"Unsupported (dbtype, log_type) pair (`%s`,`%s`)",
-			options.DBType, options.LogType)
 	}
+
 	return &options, nil
 }
 

@@ -1,12 +1,17 @@
 FROM golang:1.14-alpine3.12 as rdslogs
 
-WORKDIR /rdslogs
+ENV GOPATH=/go
 
-COPY go.mod go.sum ./
+RUN mkdir -p /go/src/github.com/razorpay/rdslogs && \
+    apk add --no-cache git
 
-RUN apk add --no-cache git && go mod download
+WORKDIR /go/src/github.com/razorpay/rdslogs/
 
-COPY . .
+COPY go.mod go.sum /go/src/github.com/razorpay/rdslogs/
+
+RUN go mod download
+
+COPY . /go/src/github.com/razorpay/rdslogs/
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-w -s" -o rdslogs main.go
 
@@ -15,6 +20,6 @@ FROM golang:1.14-alpine3.12
 
 WORKDIR /app
 
-COPY --from=rdslogs /rdslogs/rdslogs rdslogs
+COPY --from=rdslogs /go/src/github.com/razorpay/rdslogs/rdslogs rdslogs
 
 ENTRYPOINT ["/app/rdslogs"]
