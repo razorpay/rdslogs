@@ -79,8 +79,6 @@ func (c *CLI) Stream() error {
 		logFile: latestFile,
 	}
 
-	//fmt.Println("got the parser")
-
 	// create the chosen output publisher target
 	if c.Options.Output == constants.OutputStdOut {
 		c.output = &publisher.STDOUTPublisher{}
@@ -93,7 +91,6 @@ func (c *CLI) Stream() error {
 	}
 
 	for {
-		//fmt.Println("inside for loop")
 		// check for signal triggered exit
 		select {
 		case <-c.Abort:
@@ -101,7 +98,6 @@ func (c *CLI) Stream() error {
 		default:
 		}
 
-		//fmt.Println("after signals")
 		// get recent log entries
 		resp, err := c.getRecentEntries(sPos)
 		if err != nil {
@@ -164,7 +160,6 @@ func (c *CLI) Stream() error {
 			c.waitFor(5 * time.Second)
 		}
 
-		//fmt.Println("before marker")
 		newMarker := c.getNextMarker(sPos, resp)
 
 		logrus.WithFields(logrus.Fields{
@@ -181,8 +176,6 @@ func (c *CLI) Stream() error {
 			}
 			sPos.logFile = latestFile
 		}
-
-		//fmt.Println("before tracker")
 
 		// In tracker is enabled, will download the previous file written less than an hour ago
 		if trackerEnabled {
