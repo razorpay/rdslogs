@@ -162,11 +162,13 @@ func (c *CLI) Stream() error {
 
 		newMarker := c.getNextMarker(sPos, resp)
 
-		logrus.WithFields(logrus.Fields{
-			"prevMarker": sPos.marker,
-			"newMarker":  newMarker,
-			"file":       sPos.logFile.LogFileName}).
-			Info("Got new marker")
+		if sPos.marker != newMarker {
+			logrus.WithFields(logrus.Fields{
+				"prevMarker": sPos.marker,
+				"newMarker":  newMarker,
+				"file":       sPos.logFile.LogFileName}).
+				Info("Got new marker")
+		}
 
 		if newMarker == "0" {
 			latestFile, err := c.GetLatestLogFile()
