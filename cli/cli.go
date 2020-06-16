@@ -221,7 +221,7 @@ func (c *CLI) Stream() error {
 
 			for _, jsonData := range formattedData {
 				if jsonData != "" {
-					c.output.Write(jsonData)
+					c.output.Write(jsonData + "\n")
 				}
 			}
 		}
@@ -421,7 +421,7 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 
 				for _, jsonData := range formattedData {
 					if jsonData != "" {
-						output.Write(jsonData)
+						output.Write(jsonData + "\n")
 					}
 				}
 				break
@@ -431,7 +431,7 @@ func (c *CLI) downloadFile(logFile LogFile, ch chan LogFile, customPathOptional 
 
 			for _, jsonData := range formattedData {
 				if jsonData != "" {
-					output.Write(jsonData)
+					output.Write(jsonData + "\n")
 				}
 			}
 		}
