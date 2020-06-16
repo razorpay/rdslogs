@@ -221,7 +221,7 @@ func (c *CLI) Stream() error {
 
 			for _, jsonData := range formattedData {
 				if jsonData != "" {
-					output.Write(jsonData + "\n")
+					c.output.Write(jsonData + "\n")
 				}
 			}
 		}
