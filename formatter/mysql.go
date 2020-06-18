@@ -62,7 +62,7 @@ func (f *MySQLFormatter) Format(log string) []string {
 				continue
 			}
 
-			QueryStrings = append(QueryStrings, string(jsonData))
+			QueryStrings = append(QueryStrings, removeSensitiveData(string(jsonData)))
 
 			counter = 0
 		}
