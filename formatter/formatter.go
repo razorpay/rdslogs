@@ -25,7 +25,7 @@ type JsonData struct {
 func removeSensitiveData(data string) string {
 	regexps := [...]string{
 		// regex for credit cards, mobile
-		"[0-9+-]{8,21}",
+		"[0-9+]{10,21}",
 		// regex for email, vpa
 		"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*",
 	}
