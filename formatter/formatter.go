@@ -2,6 +2,9 @@ package formatter
 
 import (
 	"regexp"
+	"strings"
+
+	"github.com/razorpay/rdslogs/constants"
 )
 
 type Formatter interface {
@@ -23,15 +26,17 @@ type JsonData struct {
 }
 
 func removeSensitiveData(data string) string {
-	regexps := [...]string{
-		// regex for credit cards, mobile
-		"[0-9+]{10,21}",
-		// regex for email, vpa
-		"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*",
+	regexps := map[string]string{
+		constants.RegexEmail:     constants.RegexDefaultReplace,
+		constants.RegexIpAddress: constants.RegexDefaultReplace,
+		constants.RegexMobile:    constants.RegexDefaultReplace,
+		constants.RegexName:      constants.RegexNameReplace,
 	}
 
-	for _, reg := range regexps {
-		data = regexp.MustCompile(reg).ReplaceAllString(data, "*")
+	data = strings.Replace(data, "`", "", -1)
+
+	for reg, repl := range regexps {
+		data = regexp.MustCompile(reg).ReplaceAllString(data, repl)
 	}
 
 	return data
