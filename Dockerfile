@@ -2,6 +2,7 @@ FROM golang:1.14-alpine3.12 as rdslogs
 
 ENV GOPATH=/go
 
+# hadolint ignore=DL3018
 RUN mkdir -p /go/src/github.com/razorpay/rdslogs && \
     apk add --no-cache git
 
