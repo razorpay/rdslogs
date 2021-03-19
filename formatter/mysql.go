@@ -91,9 +91,16 @@ func getUser(str string) string {
 }
 
 func getHost(str string) string {
-	re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
+	var host string
 
-	return re.FindStringSubmatch(str)[0]
+	re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
+	match := re.FindStringSubmatch(str)
+
+	if len(match) > 0 {
+		host = match[0]
+	}
+
+	return host
 }
 
 func getConnectionId(str string) int64 {
