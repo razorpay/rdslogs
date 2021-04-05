@@ -99,7 +99,7 @@ func getUser(str string) string {
 }
 
 func getHost(str string) string {
-	regex := "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}"
+	regex := `(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`
 	match := regexp.MustCompile(regex).FindStringSubmatch(str)
 
 	if len(match) > 0 {
