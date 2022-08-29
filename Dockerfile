@@ -1,4 +1,4 @@
-FROM golang:1.14-alpine3.12 as rdslogs
+FROM golang:1.19.0-alpine3.16 as rdslogs
 
 ENV GOPATH=/go
 
@@ -17,7 +17,7 @@ COPY . /go/src/github.com/razorpay/rdslogs/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-w -s" -o rdslogs main.go
 
 
-FROM golang:1.14-alpine3.12
+FROM golang:1.19.0-alpine3.16
 
 WORKDIR /app
 
